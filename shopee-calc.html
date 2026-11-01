@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>เครื่องคิดราคาและกำไร Shopee</title>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --txt:#e2e8f0;
+          --dim:#94a3b8; --ok:#22c55e; --bad:#ef4444; --accent:#f97316; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
+         padding:16px; line-height:1.5; }
+  .wrap { max-width:520px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--dim); font-size:13px; margin-bottom:16px; }
+  .card { background:var(--card); border:1px solid var(--line);
+          border-radius:12px; padding:14px; margin-bottom:12px; }
+  label { display:block; font-size:13px; color:var(--dim); margin:8px 0 4px; }
+  input { width:100%; padding:10px; font-size:16px; border-radius:8px;
+          border:1px solid var(--line); background:#0b1220; color:var(--txt); }
+  .row { display:flex; gap:10px; }
+  .row > div { flex:1; }
+  .out { font-size:15px; }
+  .out div { display:flex; justify-content:space-between; padding:6px 0;
+             border-bottom:1px solid var(--line); }
+  .out div:last-child { border-bottom:0; }
+  .big { font-size:26px; font-weight:700; color:var(--accent); }
+  .pos { color:var(--ok); font-weight:600; }
+  .neg { color:var(--bad); font-weight:600; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { padding:6px 4px; text-align:right; border-bottom:1px solid var(--line); }
+  th:first-child,td:first-child { text-align:left; }
+  th { color:var(--dim); font-weight:500; font-size:12px; }
+  .note { font-size:12px; color:var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>เครื่องคิดราคาและกำไร Shopee</h1>
+  <div class="sub">ใส่ต้นทุน → รู้ราคาที่ควรตั้ง และกำไรที่ได้จริงหลังหักค่าธรรมเนียม</div>
+
+  <div class="card">
+    <div class="row">
+      <div><label>ต้นทุนสินค้า (บาท)</label><input id="cost" type="number" value="100" step="0.01"></div>
+      <div><label>ค่าส่งที่เราออก (บาท)</label><input id="ship" type="number" value="30" step="0.01"></div>
+    </div>
+    <div class="row">
+      <div><label>ค่าคอมมิชชั่น (%)</label><input id="comm" type="number" value="8" step="0.1"></div>
+      <div><label>ค่าธรรมเนียมการขาย (%)</label><input id="svc" type="number" value="5" step="0.1"></div>
+    </div>
+    <div class="row">
+      <div><label>ส่วนลดที่ให้ลูกค้า (%)</label><input id="disc" type="number" value="0" step="0.1"></div>
+      <div><label>กำไรที่ต้องการ (%)</label><input id="marg" type="number" value="20" step="1"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="out">
+      <div><span>ราคาที่ควรตั้ง</span><span class="big" id="price">–</span></div>
+      <div><span>จุดเริ่มขาดทุน (ต่ำกว่านี้ = ขาดทุน)</span><span id="be">–</span></div>
+      <div><span>ค่าธรรมเนียมที่เสีย</span><span id="fee">–</span></div>
+      <div><span>กำไรสุทธิต่อชิ้น</span><span id="net">–</span></div>
+      <div><span>กำไรจริง (%)</span><span id="real">–</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>อยากได้กำไร</th><th>ตั้งราคา</th><th>ได้จริง/ชิ้น</th></tr></thead>
+      <tbody id="tbl"></tbody>
+    </table>
+  </div>
+
+  <p class="note">คำนวณตามสูตร: ราคาขาย = (ต้นทุน + ค่าส่ง) ÷ (1 − กำไร% − ค่าคอม% − ค่าธรรมเนียม% − อื่นๆ%) ÷ (1 − ส่วนลด%)<br>
+  ใช้ได้บนมือถือ ไม่ต้องต่อเน็ต ไม่เก็บข้อมูลของคุณ</p>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const num = id => parseFloat($(id).value) || 0;
+
+function fees() {
+  return (num('comm') + num('svc')) / 100;
+}
+function suggestPrice(cost, ship, marginPct) {
+  const denom = 1 - marginPct / 100 - fees();
+  if (denom <= 0) return null;
+  return (cost + ship) / denom / (1 - num('disc') / 100);
+}
+function profitAt(price, cost, ship) {
+  const gross = price * (1 - num('disc') / 100);
+  const fee = gross * fees();
+  const net = gross - fee - cost - ship;
+  return { gross, fee, net, margin: gross ? net / gross * 100 : 0 };
+}
+const baht = n => '฿' + n.toLocaleString('th-TH', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+function render() {
+  const cost = num('cost'), ship = num('ship'), margin = num('marg');
+  const price = suggestPrice(cost, ship, margin);
+  if (price === null) {
+    $('price').textContent = 'ตั้งไม่ได้';
+    $('be').textContent = '–'; $('fee').textContent = '–';
+    $('net').textContent = '–'; $('real').textContent = '–';
+  } else {
+    const r = profitAt(price, cost, ship);
+    $('price').textContent = baht(price);
+    const be = suggestPrice(cost, ship, 0);
+    $('be').textContent = be === null ? '–' : baht(be);
+    $('fee').textContent = baht(r.fee);
+    $('net').textContent = baht(r.net);
+    $('net').className = r.net >= 0 ? 'pos' : 'neg';
+    $('real').textContent = r.margin.toFixed(1) + '%';
+    $('real').className = r.margin >= 0 ? 'pos' : 'neg';
+  }
+  const rows = [10,20,30,40,50].map(m => {
+    const p = suggestPrice(cost, ship, m);
+    if (p === null) return `<tr><td>${m}%</td><td>–</td><td>–</td></tr>`;
+    const r = profitAt(p, cost, ship);
+    return `<tr><td>${m}%</td><td>${baht(p)}</td><td class="${r.net>=0?'pos':'neg'}">${baht(r.net)}</td></tr>`;
+  }).join('');
+  $('tbl').innerHTML = rows;
+}
+document.querySelectorAll('input').forEach(i => i.addEventListener('input', render));
+render();
+</script>
+</body>
+</html>
