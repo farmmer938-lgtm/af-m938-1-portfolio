@@ -1,0 +1,21 @@
+{
+  "account_label": "AI1",
+  "channels": [
+    {"channel_name":"ช่องเล่าเรื่องการเงิน","channel_url":"https://youtube.com/@money1",
+     "niche":"การเงินส่วนบุคคล","language":"th","subscribers":1500,"total_videos":38,
+     "uploads_per_week":2,"avg_views_last_10":420,
+     "top_videos":[{"title":"ออมเงิน 10000 ใน 6 เดือน","views":45000,"url":"u"}],
+     "format":"long","monetized":false,"monthly_revenue_thb":0,
+     "biggest_problem":"คนดูเยอะแต่ไม่กดติดตาม","needs_help_with":"สคริปต์คลิปยาว"},
+    {"channel_name":"ช่องเกมมือถือ","channel_url":"UNKNOWN","niche":"เกมมือถือ",
+     "language":"th","subscribers":"UNKNOWN","total_videos":12,"uploads_per_week":1,
+     "avg_views_last_10":"UNKNOWN","top_videos":[{"title":"รีวิวเกมใหม่"}],
+     "format":"shorts","monetized":"UNKNOWN","monthly_revenue_thb":"UNKNOWN",
+     "biggest_problem":"วิวตก","needs_help_with":"ไอเดียคลิปสั้น"}
+  ],
+  "other_platforms":{"facebook":"เพจเล่าเรื่องเงิน"},
+  "shopee":{"shop_url":"UNKNOWN","category":"หนังสือ/เครื่องเขียน"},
+  "assets":["คลิปเก่า 38 ไฟล์"],
+  "goal_thb_per_month":3000,
+  "blockers":["ไม่มีเวลาเขียนสคริปต์"]
+}
