@@ -1,0 +1,12 @@
+{
+  "name": "af-databridge-mcp",
+  "version": "1.0.0",
+  "mcpName": "io.github.farmmer938-lgtm/af-databridge",
+  "description": "Zero-dependency MCP server: CSV/JSON conversion with type inference, and weighted KPI scoring.",
+  "type": "module",
+  "bin": { "af-databridge-mcp": "server.mjs" },
+  "files": ["server.mjs", "src/", "README.md"],
+  "scripts": { "test": "node test.mjs" },
+  "keywords": ["mcp", "csv", "json", "kpi", "data"],
+  "license": "MIT"
+}
