@@ -22,6 +22,10 @@ m938-2 closes that gap and adds everything needed to list + sell.
 | `designs.json` | The 8 designs (title / sub / ink). |
 | `src/make_pod_assets.mjs` | Generator: SVG → print PNG + mockup JPG. |
 | `src/make_kit.py` | Generator: pack.json + UPLOAD_GUIDE.md + store.html. |
+| `src/lazada_client.py` | **Lazada Open Platform client** — signs requests, runs the OAuth flow, uploads images, builds + creates products. Lets AF push listings via API. |
+| `src/test_lazada_client.py` | 15 tests (signature vs Lazada's official vector, payload build, multipart, pack integration). |
+| `LAZADA_SETUP.md` | K's one-time setup runbook for the Lazada developer app. |
+| `out/callback.html` | OAuth callback page — shows the `code` for K to hand to AF. |
 | `src/test_pod_assets.py` | 7 tests (file spec, real transparency, pack integrity, profit, store cards). |
 
 ## Economics (verified inputs)
@@ -36,7 +40,7 @@ m938-2 closes that gap and adds everything needed to list + sell.
 npm install sharp
 node src/make_pod_assets.mjs      # needs designs.json + Thai font (Sarabun)
 python3 src/make_kit.py
-python3 -m pytest src/test_pod_assets.py -q   # 7 passed
+python3 -m pytest src/test_pod_assets.py src/test_lazada_client.py -q   # 22 passed
 ```
 
 Thai text needs the **Sarabun** or **Noto Sans Thai** font installed; without it the

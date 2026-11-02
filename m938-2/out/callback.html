@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lazada authorization — AF m938-2</title>
+<style>
+ body{font-family:system-ui,-apple-system,"Segoe UI",Sarabun,sans-serif;max-width:640px;margin:8vh auto;padding:0 20px;color:#1b1b1f;line-height:1.6}
+ h1{font-size:1.3rem} code{background:#f1f2f4;padding:2px 6px;border-radius:6px;word-break:break-all}
+ #code{font-size:1.05rem;display:block;margin:14px 0;padding:14px;background:#f6f8ff;border:1px solid #ccd6ff;border-radius:10px;word-break:break-all;user-select:all}
+ .muted{color:#666;font-size:.9rem}
+ button{font:inherit;padding:10px 16px;border:0;border-radius:8px;background:#0b57d0;color:#fff;cursor:pointer}
+ .ok{color:#0a7d33;font-weight:600}.bad{color:#b00020;font-weight:600}
+</style></head><body>
+<h1>Lazada authorization — AF m938-2</h1>
+<p id="msg" class="muted">Reading the authorization code…</p>
+<div id="wrap" hidden>
+  <p>คัดลอกรหัสนี้ส่งให้ AF (รหัสใช้ได้ครั้งเดียว และหมดอายุใน 30 นาที):</p>
+  <code id="code"></code>
+  <button onclick="navigator.clipboard.writeText(document.getElementById('code').textContent).then(()=>this.textContent='คัดลอกแล้ว ✓')">คัดลอกรหัส</button>
+</div>
+<script>
+ const q = new URLSearchParams(location.search);
+ const code = q.get("code");
+ const msg = document.getElementById("msg");
+ if (code) {
+   document.getElementById("wrap").hidden = false;
+   document.getElementById("code").textContent = code;
+   msg.innerHTML = '<span class="ok">ได้รับรหัสอนุญาตแล้ว</span>';
+ } else {
+   const err = q.get("error") || q.get("error_description");
+   msg.innerHTML = err ? '<span class="bad">Lazada ปฏิเสธ: ' + err + '</span>'
+                       : '<span class="bad">ไม่พบพารามิเตอร์ code ใน URL</span>';
+ }
+</script></body></html>
