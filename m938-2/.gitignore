@@ -5,3 +5,4 @@ fonts/
 *.log
 lazada.json
 .secrets/
+.novnc-profile/

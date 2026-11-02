@@ -69,6 +69,31 @@ class Tab:
         self.send("Page.navigate", {"url": url})
         time.sleep(settle)
 
+    def upload(self, selector: str, paths: list[str]):
+        """Attach local files to a file input (CDP DOM.setFileInputFiles)."""
+        r = self.send("Runtime.evaluate", {"expression": f"document.querySelector({json.dumps(selector)})"})
+        obj = r.get("result", {}).get("objectId")
+        if not obj:
+            raise RuntimeError(f"no element for {selector!r}")
+        self.send("DOM.enable")
+        self.send("DOM.setFileInputFiles", {"files": [str(p) for p in paths], "objectId": obj})
+
+    def real_click(self, selector: str, index: int = 0):
+        """Trusted mouse click at an element's centre (Svelte needs real events)."""
+        box = self.js(
+            "(()=>{const e=document.querySelectorAll(%s)[%d];if(!e)return null;"
+            "e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();"
+            "return {x:r.x+r.width/2,y:r.y+r.height/2,w:r.width,h:r.height};})()"
+            % (json.dumps(selector), index)
+        )
+        if not box or not box.get("w"):
+            return None
+        x, y = box["x"], box["y"]
+        for typ in ("mousePressed", "mouseReleased"):
+            self.send("Input.dispatchMouseEvent", {"type": typ, "x": x, "y": y, "button": "left", "clickCount": 1})
+            time.sleep(0.05)
+        return box
+
     def close(self):
         self.ws.close()
 
@@ -126,6 +151,10 @@ def main(argv: list[str]) -> int:
             print(t.js(_FILL % (_js_str(rest[0]), _js_str(rest[1]))))
         elif cmd == "eval":
             print(json.dumps(t.js(rest[0]), ensure_ascii=False))
+        elif cmd == "upload":
+            sel = rest[0]
+            t.upload(sel, rest[1:])
+            print(f"uploaded {len(rest)-1} file(s) to {sel}")
         else:
             print(f"unknown command {cmd!r}", file=sys.stderr)
             return 2

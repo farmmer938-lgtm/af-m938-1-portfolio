@@ -16,7 +16,7 @@ pgrep -x openbox >/dev/null || {
 pgrep -f "chrome-novnc" >/dev/null || {
   setsid chromium --no-sandbox --disable-gpu --start-maximized --no-first-run \
     --remote-debugging-port=9222 --remote-allow-origins=* \
-    --user-data-dir=/tmp/chrome-novnc --window-size=1920,1080 \
+    --user-data-dir=/workspace/.novnc-profile --window-size=1920,1080 \
     "https://app.do.ink/" >/tmp/chromium-novnc.log 2>&1 < /dev/null &
   sleep 4
 }
