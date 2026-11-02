@@ -123,6 +123,32 @@ def parse_youtube_videos(text, limit=10):
     return out
 
 
+def parse_youtube_shorts(text, limit=20):
+    """Shorts tab uses shortsLockupViewModel, not lockupViewModel.
+
+    Each item carries an accessibilityText of the form
+    '<title>, การดู <views> ครั้ง - เล่นวิดีโอสั้น'.
+    """
+    out = []
+    for b in text.split('"shortsLockupViewModel":{')[1:]:
+        eid = re.search(r'"entityId":"shorts-shelf-item-([\w-]{11})"', b)
+        acc = re.search(r'"accessibilityText":"([^"]+)"', b)
+        if not acc:
+            continue
+        label = acc.group(1)
+        title = label.split(", การดู")[0].strip()
+        views = re.search(r"การดู\s*([\d.,]+)\s*ครั้ง", label)
+        out.append({
+            "video_id": eid.group(1) if eid else UNKNOWN,
+            "title": title[:120],
+            "views": parse_compact_number(views.group(1) if views else None),
+            "url": f"https://youtu.be/{eid.group(1)}" if eid else UNKNOWN,
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
 def parse_tiktok(text, handle):
     name = _meta(text, "og:title") or UNKNOWN
     f = re.search(r'"followerCount":(\d+)', text)
@@ -178,6 +204,8 @@ def measure(platform, handle, with_videos=False):
         if with_videos:
             vt = fetch(f"https://www.youtube.com/@{handle}/videos")
             out["recent_videos"] = parse_youtube_videos(vt) if vt else []
+            st = fetch(f"https://www.youtube.com/@{handle}/shorts")
+            out["recent_shorts"] = parse_youtube_shorts(st) if st else []
         return out
     templates = {
         "tiktok": ("https://www.tiktok.com/@{}", parse_tiktok),
