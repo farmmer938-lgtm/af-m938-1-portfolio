@@ -1,0 +1,90 @@
+[
+  {
+    "slug": "dhamma-calm",
+    "title": "ใจเย็น",
+    "print_png": "print/dhamma-calm.png",
+    "mockup_jpg": "mockups/dhamma-calm.jpg",
+    "print_px": [
+      3600,
+      4800
+    ],
+    "dpi": 300
+  },
+  {
+    "slug": "foryou-algo",
+    "title": "อย่าเชื่ออัลกอริทึม",
+    "print_png": "print/foryou-algo.png",
+    "mockup_jpg": "mockups/foryou-algo.jpg",
+    "print_px": [
+      3600,
+      4800
+    ],
+    "dpi": 300
+  },
+  {
+    "slug": "genx-coffee",
+    "title": "กาแฟก่อน",
+    "print_png": "print/genx-coffee.png",
+    "mockup_jpg": "mockups/genx-coffee.jpg",
+    "print_px": [
+      3600,
+      4800
+    ],
+    "dpi": 300
+  },
+  {
+    "slug": "music-listen",
+    "title": "ฟังเพลง",
+    "print_png": "print/music-listen.png",
+    "mockup_jpg": "mockups/music-listen.jpg",
+    "print_px": [
+      3600,
+      4800
+    ],
+    "dpi": 300
+  },
+  {
+    "slug": "seller-9to5",
+    "title": "เลิกงานประจำ",
+    "print_png": "print/seller-9to5.png",
+    "mockup_jpg": "mockups/seller-9to5.jpg",
+    "print_px": [
+      3600,
+      4800
+    ],
+    "dpi": 300
+  },
+  {
+    "slug": "seller-boss",
+    "title": "เจ้านายตัวเอง",
+    "print_png": "print/seller-boss.png",
+    "mockup_jpg": "mockups/seller-boss.jpg",
+    "print_px": [
+      3600,
+      4800
+    ],
+    "dpi": 300
+  },
+  {
+    "slug": "seller-live",
+    "title": "ขายดีจนลืมหายใจ",
+    "print_png": "print/seller-live.png",
+    "mockup_jpg": "mockups/seller-live.jpg",
+    "print_px": [
+      3600,
+      4800
+    ],
+    "dpi": 300
+  },
+  {
+    "slug": "seller-pack",
+    "title": "แพ็คของเก่ง",
+    "print_png": "print/seller-pack.png",
+    "mockup_jpg": "mockups/seller-pack.jpg",
+    "print_px": [
+      3600,
+      4800
+    ],
+    "dpi": 300
+  }
+]
