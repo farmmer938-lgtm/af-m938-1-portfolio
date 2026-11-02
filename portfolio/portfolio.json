@@ -1,0 +1,13 @@
+{
+  "channels": [
+    {"name": "ตาต้า GenX — ปรัชญาชีวิต", "handle": "tatagenxgeny", "subscribers": 8, "videos": 34, "total_views": 5475},
+    {"name": "Farmmer — ธรรมะก่อนนอน", "handle": "farmmer-n9t", "subscribers": 11, "videos": 11, "total_views": 2674},
+    {"name": "เรื่องเล่าการ์ตูน", "handle": "kongkeatpratumma", "subscribers": 6, "videos": 10, "total_views": 1660},
+    {"name": "AERIS Music", "handle": "aerismusicth", "subscribers": 5, "videos": 22, "total_views": 1439}
+  ],
+  "platforms": [
+    {"name": "AERIS YouTube", "posts": 17, "views": 1439, "note": "17 อัปโหลด/7 วัน"},
+    {"name": "AERIS Facebook", "posts": 60, "views": 11, "note": "60 โพสต์ที่ส่งไป"},
+    {"name": "AERIS TikTok", "posts": 60, "views": 0, "note": "60 โพสต์ที่ส่งไป"}
+  ]
+}
