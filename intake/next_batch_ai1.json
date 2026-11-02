@@ -1,0 +1,244 @@
+{
+  "account": "AI1",
+  "published_count": 9,
+  "channels": [
+    {
+      "channel": "ตาต้า GenX — ปรัชญาชีวิต",
+      "niche": "ปรัชญาชีวิต / ให้กำลังใจ (philosophy & life-lesson, long-form + Shorts)",
+      "measured_best_hook": "other",
+      "patterns_used": [
+        "life_lesson",
+        "emotional_release"
+      ],
+      "next_shorts": [
+        {
+          "format": "shorts",
+          "pattern": "life_lesson",
+          "title": "ก้าวเล็ก ๆ ที่ไม่มีใครเห็น แต่สำคัญที่สุด #Shorts",
+          "thumbnail_text": "ก้าวเล็ก ๆ",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "life_lesson",
+          "title": "วันที่ไม่มีใครเชื่อเรา แต่เรายังเชื่อตัวเอง ใน 30 วินาที #Shorts",
+          "thumbnail_text": "วันที่ไม่มีใครเชื่อเรา",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "life_lesson",
+          "title": "ความล้มเหลวที่สอนเรามากกว่าความสำเร็จ — ฟังแล้วจะคิดได้ #Shorts",
+          "thumbnail_text": "ความล้มเหลวที่สอนเรามา",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "life_lesson",
+          "title": "คนที่ไปเร็ว ไม่ได้แปลว่าจะไปไกล #Shorts",
+          "thumbnail_text": "คนที่ไปเร็ว",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "life_lesson",
+          "title": "สิ่งที่เราเสียไป ทำให้เราได้สิ่งนี้มา ใน 30 วินาที #Shorts",
+          "thumbnail_text": "สิ่งที่เราเสียไป",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "life_lesson",
+          "title": "วันที่คิดจะยอมแพ้ แต่ยังไปต่อ — ฟังแล้วจะคิดได้ #Shorts",
+          "thumbnail_text": "วันที่คิดจะยอมแพ้",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        }
+      ],
+      "next_long": [
+        {
+          "format": "long",
+          "pattern": "emotional_release",
+          "title": "ก่อนนอนคืนนี้ ลองปล่อยเรื่องนั้นไป (เรื่องจริง)",
+          "thumbnail_text": "ก่อนนอนคืนนี้",
+          "hook_line": "30 วินาทีแรกค้างคำถามไว้ ห้ามเกริ่น",
+          "length_target_min": 8
+        },
+        {
+          "format": "long",
+          "pattern": "emotional_release",
+          "title": "เรื่องที่ยังคิดถึง ปล่อยให้มันผ่านไปเถอะ | ฟังก่อนนอน",
+          "thumbnail_text": "เรื่องที่ยังคิดถึง",
+          "hook_line": "30 วินาทีแรกค้างคำถามไว้ ห้ามเกริ่น",
+          "length_target_min": 8
+        },
+        {
+          "format": "long",
+          "pattern": "emotional_release",
+          "title": "เหนื่อยมาทั้งวัน คืนนี้ไม่ต้องเก่งก็ได้ — ฉบับเต็ม",
+          "thumbnail_text": "เหนื่อยมาทั้งวัน",
+          "hook_line": "30 วินาทีแรกค้างคำถามไว้ ห้ามเกริ่น",
+          "length_target_min": 8
+        }
+      ]
+    },
+    {
+      "channel": "Farmmer — ธรรมะก่อนนอน",
+      "niche": "ธรรมะก่อนนอน / สมาธิช่วยการนอน (Buddhist teaching, sleep-aid)",
+      "measured_best_hook": "question",
+      "patterns_used": [
+        "problem_fix",
+        "instant_relief",
+        "emotional_release"
+      ],
+      "next_shorts": [
+        {
+          "format": "shorts",
+          "pattern": "problem_fix",
+          "title": "นอนไม่หลับ? ลองหายใจแบบนี้ 10 วินาที #Shorts",
+          "thumbnail_text": "นอนไม่หลับ",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "problem_fix",
+          "title": "ตื่นกลางดึกบ่อย? ทำ 3 อย่างนี้ก่อนนอน ใน 30 วินาที #Shorts",
+          "thumbnail_text": "ตื่นกลางดึกบ่อย",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "problem_fix",
+          "title": "คิดมากจนนอนไม่หลับ? ลองวิธีนี้คืนนี้ — ฟังแล้วจะคิดได้ #Shorts",
+          "thumbnail_text": "คิดมากจนนอนไม่หลับ",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "problem_fix",
+          "title": "ปวดหัวตอนเช้า? เช็คท่านอนนี้ก่อน #Shorts",
+          "thumbnail_text": "ปวดหัวตอนเช้า",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "problem_fix",
+          "title": "เหนื่อยแต่หลับไม่ลง? ลองท่านี้ 1 นาที ใน 30 วินาที #Shorts",
+          "thumbnail_text": "เหนื่อยแต่หลับไม่ลง",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "problem_fix",
+          "title": "ขี้เกียจเข้านอน? ตั้งใจแบบนี้แทน — ฟังแล้วจะคิดได้ #Shorts",
+          "thumbnail_text": "ขี้เกียจเข้านอน",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        }
+      ],
+      "next_long": [
+        {
+          "format": "long",
+          "pattern": "instant_relief",
+          "title": "เปิดทิ้งไว้ทั้งคืน หลับลึกถึงเช้า (เรื่องจริง)",
+          "thumbnail_text": "เปิดทิ้งไว้ทั้งคืน",
+          "hook_line": "30 วินาทีแรกค้างคำถามไว้ ห้ามเกริ่น",
+          "length_target_min": 8
+        },
+        {
+          "format": "long",
+          "pattern": "instant_relief",
+          "title": "ฟัง 10 นาที ใจเย็นลงทันที | ฟังก่อนนอน",
+          "thumbnail_text": "ฟัง 10 นาที",
+          "hook_line": "30 วินาทีแรกค้างคำถามไว้ ห้ามเกริ่น",
+          "length_target_min": 8
+        },
+        {
+          "format": "long",
+          "pattern": "instant_relief",
+          "title": "เปิดเสียงนี้ตอนเครียด ได้ผลจริง — ฉบับเต็ม",
+          "thumbnail_text": "เปิดเสียงนี้ตอนเครียด",
+          "hook_line": "30 วินาทีแรกค้างคำถามไว้ ห้ามเกริ่น",
+          "length_target_min": 8
+        }
+      ]
+    },
+    {
+      "channel": "เรื่องเล่าการ์ตูน",
+      "niche": "เรื่องเล่า/ดราม่าครอบครัว ซีรีส์การ์ตูนไทย (Thai story & family drama, serialised)",
+      "measured_best_hook": "relational_scene",
+      "patterns_used": [
+        "relational",
+        "emotional_release"
+      ],
+      "next_shorts": [
+        {
+          "format": "shorts",
+          "pattern": "relational",
+          "title": "คืนนั้นพ่อกลับบ้านช้า เพราะไปรับจ็อบเพิ่มให้เรา #Shorts",
+          "thumbnail_text": "คืนนั้นพ่อกลับบ้านช้า",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "relational",
+          "title": "วันที่แม่ป่วย แต่ยังทำกับข้าวให้เรากิน ใน 30 วินาที #Shorts",
+          "thumbnail_text": "วันที่แม่ป่วย",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "relational",
+          "title": "น้องโทรมาหา แต่เราบอกว่าไม่ว่าง — ฟังแล้วจะคิดได้ #Shorts",
+          "thumbnail_text": "น้องโทรมาหา",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "relational",
+          "title": "วันที่พ่อขอโทษเราเป็นครั้งแรก #Shorts",
+          "thumbnail_text": "วันที่พ่อขอโทษเราเป็นค",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "relational",
+          "title": "แม่เก็บเงินใส่กระปุกไว้ให้เราตั้งแต่เด็ก ใน 30 วินาที #Shorts",
+          "thumbnail_text": "แม่เก็บเงินใส่กระปุกไว",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        },
+        {
+          "format": "shorts",
+          "pattern": "relational",
+          "title": "คืนสุดท้ายที่ได้นั่งกินข้าวกับยาย — ฟังแล้วจะคิดได้ #Shorts",
+          "thumbnail_text": "คืนสุดท้ายที่ได้นั่งกิ",
+          "hook_line": "2 วินาทีแรกต้องพูดปัญหาหรือคำถามทันที"
+        }
+      ],
+      "next_long": [
+        {
+          "format": "long",
+          "pattern": "emotional_release",
+          "title": "ก่อนนอนคืนนี้ ลองปล่อยเรื่องนั้นไป (เรื่องจริง)",
+          "thumbnail_text": "ก่อนนอนคืนนี้",
+          "hook_line": "30 วินาทีแรกค้างคำถามไว้ ห้ามเกริ่น",
+          "length_target_min": 8
+        },
+        {
+          "format": "long",
+          "pattern": "emotional_release",
+          "title": "เรื่องที่ยังคิดถึง ปล่อยให้มันผ่านไปเถอะ | ฟังก่อนนอน",
+          "thumbnail_text": "เรื่องที่ยังคิดถึง",
+          "hook_line": "30 วินาทีแรกค้างคำถามไว้ ห้ามเกริ่น",
+          "length_target_min": 8
+        },
+        {
+          "format": "long",
+          "pattern": "emotional_release",
+          "title": "เหนื่อยมาทั้งวัน คืนนี้ไม่ต้องเก่งก็ได้ — ฉบับเต็ม",
+          "thumbnail_text": "เหนื่อยมาทั้งวัน",
+          "hook_line": "30 วินาทีแรกค้างคำถามไว้ ห้ามเกริ่น",
+          "length_target_min": 8
+        }
+      ]
+    }
+  ]
+}

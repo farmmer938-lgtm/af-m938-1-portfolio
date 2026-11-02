@@ -1,0 +1,61 @@
+{
+  "channels": 3,
+  "total_subs": 25,
+  "total_videos": 55,
+  "subs_gap_to_1000": 975,
+  "per_channel": [
+    {
+      "channel": "ตาต้า GenX — ปรัชญาชีวิต",
+      "subs": 8,
+      "videos": 34,
+      "avg_views_last_10": 180,
+      "shorts_dominance": 7.8
+    },
+    {
+      "channel": "Farmmer — ธรรมะก่อนนอน",
+      "subs": 11,
+      "videos": 11,
+      "avg_views_last_10": 392,
+      "shorts_dominance": 3.29
+    },
+    {
+      "channel": "เรื่องเล่าการ์ตูน",
+      "subs": 6,
+      "videos": 10,
+      "avg_views_last_10": 176,
+      "shorts_dominance": 6.13
+    }
+  ],
+  "hook_performance": {
+    "other": {
+      "count": 2,
+      "avg_views": 1388.0,
+      "max_views": 1404
+    },
+    "question": {
+      "count": 1,
+      "avg_views": 1288.0,
+      "max_views": 1288
+    },
+    "action_cta": {
+      "count": 1,
+      "avg_views": 1233.0,
+      "max_views": 1233
+    },
+    "emotional": {
+      "count": 1,
+      "avg_views": 1080.0,
+      "max_views": 1080
+    },
+    "relational_scene": {
+      "count": 2,
+      "avg_views": 769.5,
+      "max_views": 1079
+    },
+    "abstract_metaphor": {
+      "count": 2,
+      "avg_views": 510.0,
+      "max_views": 913
+    }
+  }
+}

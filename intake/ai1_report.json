@@ -1,0 +1,89 @@
+{
+  "account_label": "AI1",
+  "channels": [
+    {
+      "channel_name": "ตาต้า GenX — ปรัชญาชีวิต",
+      "channel_url": "https://youtube.com/@tatagenxgeny",
+      "niche": "ปรัชญาชีวิต / ให้กำลังใจ (philosophy & life-lesson, long-form + Shorts)",
+      "language": "th",
+      "subscribers": 8,
+      "total_videos": 34,
+      "uploads_per_week": 7,
+      "avg_views_last_10": 180,
+      "top_videos": [
+        {"title": "#1minute english today ep2", "views": 1404, "url": "https://youtu.be/07zfyXOmvZw"},
+        {"title": "#1minute english today ep8", "views": 1372, "url": "https://youtu.be/_Kqz7jpIzLQ"},
+        {"title": "ก้าวเล็ก ๆ ที่ไม่มีใครเห็น #Shorts", "views": 913, "url": "https://youtu.be/WA8g6zCiMmo"}
+      ],
+      "format": "mixed",
+      "monetized": false,
+      "monthly_revenue_thb": 0,
+      "biggest_problem": "คลิปยาวแนวปรัชญา (~11 นาที) ได้เฉลี่ยแค่ 6 วิว/คลิป มีแต่ Shorts ที่ได้คนดู (เฉลี่ย 307) — คลิปที่วิวสูงสุด 2 อันเป็น #1minute english (คนละแนว, อายุ 524 วัน = 2.7 วิว/วัน) จึงไม่ใช่สัญญาณ; subs 8 จากเกณฑ์ 1,000",
+      "needs_help_with": "ทำ packaging/หัวข้อ+thumbnail ให้คลิปยาวมีคนดู และวางแผนให้ถึงเกณฑ์ YPP"
+    },
+    {
+      "channel_name": "Farmmer — ธรรมะก่อนนอน",
+      "channel_url": "https://youtube.com/@farmmer-n9t",
+      "niche": "ธรรมะก่อนนอน / สมาธิช่วยการนอน (Buddhist teaching, sleep-aid)",
+      "language": "th",
+      "subscribers": 11,
+      "total_videos": 11,
+      "uploads_per_week": 9,
+      "avg_views_last_10": 392,
+      "top_videos": [
+        {"title": "นอนไม่หลับ? ลองทำท่านี้ 10 วินาที #Shorts", "views": 1288, "url": "https://youtu.be/oIsloIKa0J4"},
+        {"title": "เปิดทิ้งไว้ทั้งคืน หลับลึกถึงเช้า #Shorts", "views": 1233, "url": "https://youtu.be/oyrWvxdnImY"},
+        {"title": "ก่อนนอนคืนนี้ ลองปล่อยวางสักเรื่อง #Shorts", "views": 1080, "url": "https://youtu.be/wIpNM1gqPYc"}
+      ],
+      "format": "mixed",
+      "monetized": false,
+      "monthly_revenue_thb": 0,
+      "biggest_problem": "Shorts ได้คนดูดี (เฉลี่ย 489) แต่คลิปยาว 10–12 นาทีได้แค่ ~2 วิว/คลิป และช่องยังใหม่ (สร้าง 2026-10-16); subs 11 จากเกณฑ์ 1,000",
+      "needs_help_with": "ทำ compilation คลิปยาว 90–180 นาที และแปลงยอดดู Shorts ให้เป็น subscriber"
+    },
+    {
+      "channel_name": "เรื่องเล่าการ์ตูน",
+      "channel_url": "https://youtube.com/@kongkeatpratumma",
+      "niche": "เรื่องเล่า/ดราม่าครอบครัว ซีรีส์การ์ตูนไทย (Thai story & family drama, serialised)",
+      "language": "th",
+      "subscribers": 6,
+      "total_videos": 10,
+      "uploads_per_week": 7,
+      "avg_views_last_10": 176,
+      "top_videos": [
+        {"title": "คืนนั้นแม่ทำกับข้าวให้เขา กินข้าวด้วยกันที่โต๊ะตัวเดิมที่เขาจากไป", "views": 1079, "url": "https://youtu.be/udi7bekVJiA"},
+        {"title": "เขาคุกเข่าลงต่อหน้ารูปพ่อ แล้วขอโทษซ้ำ ๆ", "views": 460, "url": "https://youtu.be/g0eWYjCEYTc"},
+        {"title": "เมล็ดที่รออยู่ใต้ดิน | เรื่องเล่าการ์ตูน #Shorts", "views": 107, "url": "https://youtu.be/Wr5N-NfhGMM"}
+      ],
+      "format": "mixed",
+      "monetized": false,
+      "monthly_revenue_thb": 0,
+      "biggest_problem": "ชนะเฉพาะ Shorts ดราม่าครอบครัว (แม่/พ่อ = 1,079/460 วิว) แต่ Shorts แนวคำเปรียบธรรมชาติ (เมล็ด/แม่น้ำ) ได้แค่ ~100 วิว และคลิปยาว 10–15 นาทีได้ ~2–4 วิว; subs 6 จากเกณฑ์ 1,000",
+      "needs_help_with": "ทำซีรีส์ Shorts ดราม่าครอบครัวให้สม่ำเสมอ และทำ packaging ให้คลิปยาวมีคนดู"
+    }
+  ],
+  "other_platforms": {"facebook": "UNKNOWN", "tiktok": "UNKNOWN"},
+  "shopee": {"shop_url": "UNKNOWN", "category": "UNKNOWN"},
+  "assets": [
+    "คลิปที่เผยแพร่แล้ว 55 คลิปบน 3 ช่อง (ch1 34 + ch2 11 + ch4 10)",
+    "คลังคอนเทนต์ Shorts ไทย ~193 ชิ้น (ops/content_bank.json) ≈ 37 วัน @ 5/วัน",
+    "ไปป์ไลน์เรนเดอร์ฟรี: edge-tts + ffmpeg (วิดีโอ 1080x1920 + คลิปยาว 1920x1080)",
+    "OAuth token แยกต่อช่อง + GitHub Actions อัปโหลดอัตโนมัติ (auto-shorts.yml)",
+    "ซีรีส์ยาวที่ผลิตแล้ว: มัทนะพาธา, ไกรทอง ตอนที่ 1 (สาธารณสมบัติไทย)"
+  ],
+  "goal_thb_per_month": "UNKNOWN",
+  "blockers": [
+    "ยังไม่ถึงเกณฑ์ YPP (1,000 subs + 4,000 ชม.ดู/12 เดือน หรือ 10M Shorts views/90 วัน) → รายได้ 0 บาท",
+    "YouTube Analytics API ถูกปิด (GCP project 888023422403 ติด 2SV) → ไม่มีข้อมูล retention จริง; ตัวเลขทั้งหมดวัดจาก YouTube Data API (public view count) ไม่ใช่ Studio Analytics",
+    "GitHub Actions cron ไม่ยิงตามกำหนดบน private repo ใหม่ → ช่องยังไม่อัปเดตเอง 24/7 จริง ต้อง dispatch ในเซสชัน",
+    "คลิปยาวได้ ~2–6 วิวทุกช่อง มีแต่ Shorts ที่มีคนดู → ยังไม่มีเส้นทางไปถึงเกณฑ์",
+    "ไม่มีบัญชี Facebook/TikTok (ak สร้างบัญชีแทน K ไม่ได้ ต้องใช้ชื่อจริง+เบอร์) → ยังไม่มีช่องทางรายได้สำรอง"
+  ],
+  "measurement_notes": {
+    "source": "YouTube Data API v3 (channels.list + playlistItems + videos)",
+    "measured_at": "2026-11-01T23:55Z",
+    "caveat": "public view counts only, NOT Studio Analytics (retention/impressions). Analytics API disabled. Unmeasurable fields = UNKNOWN or 0.",
+    "uploads_per_week": "average over the last 7 days, not lifetime",
+    "account_note": "ch4 is on a different Google account (kongkeat.p3@gmail.com); ch1/ch2 on openhands-1 (AI1)"
+  }
+}
