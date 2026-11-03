@@ -16,7 +16,12 @@ except Exception:
 sys.exit(0 if d.get("access_token") else 1)
 PY
   then
-    echo "$(date -Is) access token present; nothing to do" >>"$LOG"
+    echo "$(date -Is) access token present; publishing listings" >>"$LOG"
+    python3 "$HERE/lazada_publish.py" preflight >>"$LOG" 2>&1 || true
+    if [ ! -f /workspace/.lazada-published ]; then
+      python3 "$HERE/lazada_publish.py" create 0 >>"$LOG" 2>&1 \
+        && touch /workspace/.lazada-published
+    fi
     sleep 600
     continue
   fi
