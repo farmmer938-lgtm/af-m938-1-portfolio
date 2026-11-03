@@ -52,7 +52,7 @@ def read_counts(t: Tab) -> dict:
 
 def main() -> int:
     ensure_stack()
-    t = Tab()
+    t = Tab.for_url("app.do.ink")
     counts = read_counts(t)
     total = counts.get("ทั้งหมด", 0)
     log("orders: %s" % json.dumps({k: v for k, v in counts.items() if not k.startswith("_")}, ensure_ascii=False))

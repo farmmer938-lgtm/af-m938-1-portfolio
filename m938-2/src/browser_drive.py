@@ -40,10 +40,46 @@ def _page_ws() -> str:
     raise RuntimeError("no page target; is the noVNC Chromium running?")
 
 
+def _tab_for(url: str) -> str:
+    """Return the ws URL of a background tab whose URL contains `url`, opening one if needed.
+
+    Automation that navigates would otherwise hijack whatever tab K is looking at
+    (the K-facing authorize page, say). Giving each job its own tab keeps K's view still:
+    a newly opened tab is moved out of the way again by restoring the previous front tab.
+    """
+    pages = [t for t in _http("/json") if t.get("type") == "page"]
+    for t in pages:
+        if url in t.get("url", ""):
+            return t["webSocketDebuggerUrl"]
+    prev = pages[0]["webSocketDebuggerUrl"] if pages else None
+    with urllib.request.urlopen(CDP + "/json/new?about:blank", data=b"", timeout=10) as r:
+        ws = json.loads(r.read().decode())["webSocketDebuggerUrl"]
+    if prev:
+        try:
+            Tab(prev).send("Page.bringToFront")
+        except Exception:
+            pass
+    return ws
+
+
+def bring_to_front(url: str) -> bool:
+    """Activate the first page tab whose URL contains `url` (restore K's view after automation)."""
+    for t in _http("/json"):
+        if t.get("type") == "page" and url in t.get("url", ""):
+            Tab(t["webSocketDebuggerUrl"]).send("Page.bringToFront")
+            return True
+    return False
+
+
 class Tab:
     def __init__(self, ws_url: str | None = None):
         self.ws = websocket.create_connection(ws_url or _page_ws(), timeout=30)
         self._id = 0
+
+    @classmethod
+    def for_url(cls, url: str) -> "Tab":
+        """Open (or reuse) a background tab dedicated to `url`, leaving K's tab alone."""
+        return cls(_tab_for(url))
 
     def send(self, method: str, params: dict | None = None):
         self._id += 1
