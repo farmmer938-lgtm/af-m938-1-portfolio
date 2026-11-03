@@ -3,17 +3,30 @@
 # AF cannot sign into. Idempotent. AF then drives this browser over CDP (:9222).
 export DISPLAY=:99
 
-pgrep -f "Xvfb :99" >/dev/null || {
-  setsid Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp >/tmp/xvfb.log 2>&1 < /dev/null &
-  sleep 2
+# PID 1 (openhands-agent) never reaps, so dead children stay as zombies and `pgrep`
+# still matches them. "alive" ignores zombies; otherwise we skip starting a process
+# that is actually gone (this left a stale /tmp/.X99-lock and a dead X server).
+alive() {
+  local p st
+  for p in $(pgrep -f "$1" 2>/dev/null); do
+    st=$(ps -o stat= -p "$p" 2>/dev/null)
+    case "$st" in Z*|"") ;; *) return 0 ;; esac
+  done
+  return 1
 }
 
-pgrep -x openbox >/dev/null || {
+if ! alive "Xvfb :99"; then
+  rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
+  setsid Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp >/tmp/xvfb.log 2>&1 < /dev/null &
+  sleep 2
+fi
+
+alive "openbox" || {
   setsid openbox >/tmp/openbox.log 2>&1 < /dev/null &
   sleep 1
 }
 
-pgrep -f "chrome-novnc" >/dev/null || {
+alive "chrome-novnc" || alive "remote-debugging-port=9222" || {
   setsid chromium --no-sandbox --disable-gpu --start-maximized --no-first-run \
     --remote-debugging-port=9222 --remote-allow-origins=* \
     --user-data-dir=/workspace/.novnc-profile --window-size=1920,1080 \
@@ -22,13 +35,13 @@ pgrep -f "chrome-novnc" >/dev/null || {
 }
 
 x11vnc -storepasswd af938pod /tmp/x11vnc.pass >/dev/null 2>&1
-pgrep -f "x11vnc -display :99" >/dev/null || {
+alive "x11vnc -display :99" || {
   setsid x11vnc -display :99 -rfbport 5900 -rfbauth /tmp/x11vnc.pass \
     -forever -shared -localhost -quiet >/tmp/x11vnc.log 2>&1 < /dev/null &
   sleep 1
 }
 
-pgrep -f "websockify 12001" >/dev/null || {
+alive "websockify 12001" || {
   setsid websockify 12001 --web /usr/share/novnc 127.0.0.1:5900 >/tmp/websockify.log 2>&1 < /dev/null &
   sleep 1
 }
