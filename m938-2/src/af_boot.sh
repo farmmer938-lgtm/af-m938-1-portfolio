@@ -19,4 +19,7 @@ setsid nohup bash "$HERE/lazada_autopilot_loop.sh" >/dev/null 2>&1 &
 # 4. Do.ink order watchdog (the storefront is live; this is the revenue tripwire)
 setsid nohup bash "$HERE/doink_watchdog_loop.sh" >/dev/null 2>&1 &
 
+# 5. Gmail watchdog (order/payment/verification mail -> alerts)
+setsid nohup bash "$HERE/mail_watchdog_loop.sh" >/dev/null 2>&1 &
+
 echo "AF m938-2 services booted"

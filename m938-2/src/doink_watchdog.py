@@ -47,6 +47,9 @@ def read_counts(t: Tab) -> dict:
         if m:
             counts[lab] = int(m.group(1))
     counts["_empty"] = "ยังไม่มีคำสั่งซื้อ" in txt
+    # Do.ink bounces a logged-out visitor to the sign-in screen. Without this flag an
+    # expired session would log "orders: {}" and read exactly like zero orders.
+    counts["_session"] = "Sign in to your account" in txt or "Welcome back" in txt
     return counts
 
 
@@ -55,6 +58,9 @@ def main() -> int:
     t = Tab.for_url("app.do.ink")
     counts = read_counts(t)
     total = counts.get("ทั้งหมด", 0)
+    if counts.get("_session"):
+        log("SESSION EXPIRED: Do.ink is showing the sign-in screen; order data unavailable (K must log in via noVNC)")
+        return 0
     log("orders: %s" % json.dumps({k: v for k, v in counts.items() if not k.startswith("_")}, ensure_ascii=False))
     if total > 0:
         rows = t.js("""[...document.querySelectorAll('a[href*="/orders/"]')].map(a=>a.innerText.replace(/\\s+/g,' ').slice(0,80)).slice(0,5)""")
