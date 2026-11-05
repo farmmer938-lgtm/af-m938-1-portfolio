@@ -25,4 +25,7 @@ setsid nohup bash "$HERE/doink_watchdog_loop.sh" >/dev/null 2>&1 &
 # 5. Gmail watchdog (order/payment/verification mail -> alerts)
 setsid nohup bash "$HERE/mail_watchdog_loop.sh" >/dev/null 2>&1 &
 
+# 6. x402 cashier (the money intake: sells DataBridge per call, USDC on Base)
+command -v node >/dev/null 2>&1 && setsid nohup bash "$HERE/afcashier_loop.sh" >/dev/null 2>&1 &
+
 echo "AF m938-2 services booted"
