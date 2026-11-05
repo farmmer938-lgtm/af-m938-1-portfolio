@@ -40,6 +40,23 @@ def _page_ws() -> str:
     raise RuntimeError("no page target; is the noVNC Chromium running?")
 
 
+def _open_tab() -> str:
+    """Open a new tab via the DevTools HTTP endpoint.
+
+    Chromium >= 111 rejects POST /json/new with 405 and requires PUT, so try PUT
+    first and fall back to POST for older builds.
+    """
+    last = None
+    for method in ("PUT", "POST"):
+        req = urllib.request.Request(CDP + "/json/new?about:blank", data=b"", method=method)
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return json.loads(r.read().decode())["webSocketDebuggerUrl"]
+        except Exception as e:  # noqa: BLE001 - try the other method, keep the last error
+            last = e
+    raise RuntimeError(f"could not open a DevTools tab: {last}")
+
+
 def _tab_for(url: str) -> str:
     """Return the ws URL of a background tab whose URL contains `url`, opening one if needed.
 
@@ -52,8 +69,7 @@ def _tab_for(url: str) -> str:
         if url in t.get("url", ""):
             return t["webSocketDebuggerUrl"]
     prev = pages[0]["webSocketDebuggerUrl"] if pages else None
-    with urllib.request.urlopen(CDP + "/json/new?about:blank", data=b"", timeout=10) as r:
-        ws = json.loads(r.read().decode())["webSocketDebuggerUrl"]
+    ws = _open_tab()
     if prev:
         try:
             Tab(prev).send("Page.bringToFront")
