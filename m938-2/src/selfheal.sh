@@ -55,6 +55,8 @@ rm -f /workspace/.novnc-profile/Singleton* 2>/dev/null
 
 # 4. Python deps AF's drivers need, when missing.
 python3 -c "import websocket" >/dev/null 2>&1 || pip install -q websocket-client >>"$LOG" 2>&1 || true
+# g4f powers AF's >=5 external AI advisors (tools/af_advisor.py); it vanishes on restart.
+python3 -c "import g4f" >/dev/null 2>&1 || pip install -q g4f >>"$LOG" 2>&1 || true
 
 # 5. Gmail API deps, only once K has dropped the OAuth client secret in place.
 if [ -f /workspace/.secrets/gmail_client.json ] && ! python3 -c "import google_auth_oauthlib" >/dev/null 2>&1; then
