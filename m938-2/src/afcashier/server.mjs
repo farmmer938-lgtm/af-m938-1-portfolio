@@ -76,6 +76,81 @@ app.get("/", (_req, res) => res.json({
   tools: { "POST /csv_to_json": PRICE, "POST /kpi_score": PRICE },
   network: NET, payTo: PAY_TO,
 }));
+
+app.get("/favicon.ico", (_req, res) => {
+  res.type("image/svg+xml").send(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#0b0f19"/><text x="16" y="22" font-family="monospace" font-size="16" fill="#4ade80" text-anchor="middle">AF</text></svg>'
+  );
+});
+
+// OpenAPI is the canonical discovery contract x402scan/agents read. Served from the
+// public origin so a registration probe resolves the same document buyers will fetch.
+app.get("/openapi.json", (_req, res) => res.json({
+  openapi: "3.1.0",
+  info: {
+    title: "AF DataBridge",
+    version: "1.0.0",
+    description: "Pay-per-call data utilities by AF: CSV to typed JSON and weighted KPI scoring. Pay USDC on Base (x402); no account or API key.",
+    "x-guidance": "Call POST /csv_to_json with {\"csv\":\"a,b\\n1,true\"} to get typed JSON rows. Call POST /kpi_score with {\"metrics\":[{\"name\":\"uptime\",\"value\":99.5,\"target\":99.9,\"direction\":\"higher\",\"weight\":1}]} to get a 0..1 weighted score with a per-metric breakdown. Both cost $0.05 per call, settled in USDC on Base via x402; an unpaid call returns 402 with the payment terms in the PAYMENT-REQUIRED header.",
+    contact: { email: "farmmer938@gmail.com" },
+  },
+  paths: {
+    "/csv_to_json": {
+      post: {
+        operationId: "csv_to_json",
+        summary: "Convert CSV text to typed JSON",
+        tags: ["Data"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.05" }, protocols: [{ x402: {} }] },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: {
+            type: "object",
+            properties: {
+              csv: { type: "string", minLength: 1, description: "CSV content with a header row." },
+              delimiter: { type: "string", description: "Optional explicit delimiter; omit to auto-sniff (, ; tab |)." },
+            },
+            required: ["csv"],
+          } } },
+        },
+        responses: {
+          200: { description: "Typed JSON rows", content: { "application/json": { schema: {
+            type: "object", properties: { ok: { type: "boolean" }, rows: { type: "array", items: { type: "object" } } }, required: ["ok", "rows"],
+          } } } },
+          402: { description: "Payment Required" },
+        },
+      },
+    },
+    "/kpi_score": {
+      post: {
+        operationId: "kpi_score",
+        summary: "Score weighted KPIs to 0..1",
+        tags: ["Analytics"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.05" }, protocols: [{ x402: {} }] },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: {
+            type: "object",
+            properties: { metrics: { type: "array", items: {
+              type: "object",
+              properties: {
+                name: { type: "string" }, value: { type: "number" }, target: { type: "number" },
+                direction: { type: "string", enum: ["higher", "lower"] }, weight: { type: "number" },
+              },
+              required: ["name", "value", "target"],
+            } } },
+            required: ["metrics"],
+          } } },
+        },
+        responses: {
+          200: { description: "Weighted score with breakdown", content: { "application/json": { schema: {
+            type: "object", properties: { ok: { type: "boolean" }, score: { type: "object" } }, required: ["ok", "score"],
+          } } } },
+          402: { description: "Payment Required" },
+        },
+      },
+    },
+  },
+}));
 app.post("/csv_to_json", (req, res) => {
   try { res.json({ ok: true, rows: csvToJson(String(req.body?.csv ?? "")) }); }
   catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
