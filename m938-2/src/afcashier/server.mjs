@@ -151,6 +151,20 @@ app.get("/openapi.json", (_req, res) => res.json({
     },
   },
 }));
+// x402 discovery manifest. Indexers (x402scan, Bazaar crawlers) probe this well-known
+// path to enumerate a host's paid resources without guessing endpoints.
+app.get("/.well-known/x402", (_req, res) => res.json({
+  x402Version: 1,
+  resources: [
+    { resource: `${PUBLIC}/csv_to_json`, method: "POST", price: PRICE, network: NET, payTo: PAY_TO,
+      description: "Convert CSV text to typed JSON." },
+    { resource: `${PUBLIC}/kpi_score`, method: "POST", price: PRICE, network: NET, payTo: PAY_TO,
+      description: "Score weighted KPIs to 0..1." },
+  ],
+  openapi: `${PUBLIC}/openapi.json`,
+  contact: "farmmer938@gmail.com",
+}));
+
 app.post("/csv_to_json", (req, res) => {
   try { res.json({ ok: true, rows: csvToJson(String(req.body?.csv ?? "")) }); }
   catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
