@@ -5,6 +5,9 @@
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
+# 0. self-heal the wiped rootfs first (python3 symlink, noVNC packages, profile locks)
+bash "$HERE/selfheal.sh"
+
 # 1. noVNC desktop (Xvfb + chromium CDP :9222 + x11vnc + websockify :12001)
 bash "$HERE/restore_novnc.sh"
 rm -f /workspace/.novnc-restored

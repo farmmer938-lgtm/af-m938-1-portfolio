@@ -10,7 +10,7 @@ fi
 echo $$ > "$PID"
 while true; do
   [ -f /workspace/.lazada-autopilot.done ] && break
-  /usr/bin/python3 "$HERE/lazada_autopilot.py" >> /workspace/.lazada-autopilot.log 2>&1
+  python3 "$HERE/lazada_autopilot.py" >> /workspace/.lazada-autopilot.log 2>&1
   sleep 900
 done
 rm -f "$PID"
