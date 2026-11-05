@@ -68,6 +68,14 @@ is_running "mail_watchdog_loop.sh" || { setsid nohup bash "$SRC/mail_watchdog_lo
 is_running "doink_watchdog_loop.sh" || { setsid nohup bash "$SRC/doink_watchdog_loop.sh" >/dev/null 2>&1 & log "started doink_watchdog"; }
 is_running "lazada_autopilot_loop.sh" || { setsid nohup bash "$SRC/lazada_autopilot_loop.sh" >/dev/null 2>&1 & log "started lazada_autopilot"; }
 
+# 7. Revenue products: verify the public mirror still serves every file the
+#    OpenTask bids cite; re-publish from the durable git copy if missing. This
+#    is what keeps bid proofs from rotting after a restart (no human needed).
+GUARD=/workspace/project/AX_MASTER_BRAIN/tools/products_guard.py
+if [ -f "$GUARD" ]; then
+  python3 "$GUARD" >>/workspace/.products-guard.log 2>&1 && log "products-guard ran" || log "products-guard FAILED"
+fi
+
 # 6. Report.
 up=0
 for s in "node server.mjs" "afcashier_loop.sh" "mail_watchdog_loop.sh" "doink_watchdog_loop.sh" "novnc_watchdog.sh"; do
