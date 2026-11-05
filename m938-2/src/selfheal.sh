@@ -31,13 +31,17 @@ if [ -n "$need" ]; then
   ok=0
   for i in 1 2 3 4 5; do
     $SUDO apt-get update -qq >>"$LOG" 2>&1
-    if $SUDO apt-get install -y -qq --fix-missing xvfb x11vnc novnc websockify openbox >>"$LOG" 2>&1; then
-      ok=1; break
-    fi
-    log "apt attempt $i failed; retrying in 20s"
+    $SUDO apt-get install -y -qq --fix-missing xvfb x11vnc novnc websockify openbox >>"$LOG" 2>&1
+    # apt exits non-zero when even one .deb 503s, yet it installs the rest. Judge
+    # success by the binaries themselves, not by apt's exit code.
+    missing=""
+    for b in Xvfb x11vnc websockify openbox; do command -v "$b" >/dev/null 2>&1 || missing="$missing $b"; done
+    [ -d /usr/share/novnc ] || missing="$missing novnc"
+    if [ -z "$missing" ]; then ok=1; break; fi
+    log "apt attempt $i still missing:$missing; retrying in 20s"
     sleep 20
   done
-  [ "$ok" = 1 ] && log "noVNC packages installed" || log "apt install failed (will retry next boot)"
+  [ "$ok" = 1 ] && log "noVNC packages installed" || log "apt install incomplete (will retry next boot)"
 fi
 
 # 3. A killed Chromium leaves Singleton locks that stop the next launch from
