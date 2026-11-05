@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# AF "first breath": bring every always-on service back up after a container
+# restart. The sandbox has no cron/systemd/restart hook, so AF runs this at the
+# start of every session and from every automation. Idempotent and safe to run
+# repeatedly; it starts only what is missing.
+#
+# Why a separate script: pidfiles alone are unsafe here. After a restart the OS
+# recycles PIDs, so a stale pidfile can point at an unrelated live process and a
+# naive `kill -0` check would wrongly report "already running" (this is exactly
+# how the x402 cashier stayed dead). Every check below matches the process
+# *identity* (pgrep -f on the script/command), never just a PID.
+set -u
+SRC=/workspace/afsrc
+LOG=/workspace/.af-up.log
+log() { echo "$(date -Is) $*" | tee -a "$LOG"; }
+
+is_running() { pgrep -f "$1" >/dev/null 2>&1; }
+
+# 0. Ensure the durable source tree exists. /workspace survives a container
+#    restart, but a full rebuild wipes it; in that case re-provision from GitHub
+#    so this script never depends on a hand-placed copy.
+if [ ! -f "$SRC/af_up.sh" ]; then
+  log "afsrc missing -> provisioning from GitHub"
+  mkdir -p "$SRC"
+  tmp="$(mktemp -d)"
+  if git clone -q --depth 1 "https://${GITHUB_TOKEN}@github.com/farmmer938-lgtm/af-m938-1-portfolio.git" "$tmp/repo" 2>>"$LOG"; then
+    cp -r "$tmp/repo/m938-2/src/." "$SRC/"
+  else
+    log "provision FAILED (no GITHUB_TOKEN or clone error); cannot continue"
+    rm -rf "$tmp"; exit 1
+  fi
+  rm -rf "$tmp"
+fi
+chmod +x "$SRC"/*.sh "$SRC"/afcashier/run.sh 2>/dev/null
+
+# 1. Rootfs self-heal first (python3 symlink, noVNC packages, profile locks).
+[ -x "$SRC/selfheal.sh" ] && bash "$SRC/selfheal.sh" >>/workspace/.selfheal.log 2>&1
+
+# 2. Drop stale pidfiles so the loops below can re-acquire their guard. A pidfile
+#    is stale when its service is not actually running (PID recycling after a
+#    restart otherwise makes `kill -0` pass for an unrelated process).
+is_running "node server.mjs"           || rm -f /workspace/.afcashier.pid
+is_running "afcashier_loop.sh"         || rm -f /workspace/.afcashier-loop.pid
+is_running "mail_watchdog_loop.sh"     || rm -f /workspace/.mail-watchdog.pid
+is_running "doink_watchdog_loop.sh"    || rm -f /workspace/.doink-watchdog.pid
+is_running "lazada_autopilot_loop.sh"  || rm -f /workspace/.lazada-autopilot-loop.pid
+is_running "novnc_watchdog.sh"         || rm -f /workspace/.novnc-watchdog.pid
+
+# 3. noVNC desktop (Xvfb + chromium CDP :9222 + x11vnc + websockify :12001).
+if ! is_running "novnc_watchdog.sh"; then
+  bash "$SRC/restore_novnc.sh" >>/workspace/.novnc.log 2>&1
+  setsid nohup bash "$SRC/novnc_watchdog.sh" >/dev/null 2>&1 &
+  log "started novnc_watchdog"
+fi
+
+# 4. x402 cashier (the money intake). run.sh is idempotent; the loop supervises it.
+if ! is_running "node server.mjs"; then
+  bash "$SRC/afcashier/run.sh" >>/workspace/.afcashier.log 2>&1
+  log "started cashier"
+fi
+if ! is_running "afcashier_loop.sh"; then
+  setsid nohup bash "$SRC/afcashier_loop.sh" >/dev/null 2>&1 &
+  log "started afcashier_loop"
+fi
+
+# 5. Watchdogs: mail (IMAP when the app password exists), Do.ink orders, Lazada.
+is_running "mail_watchdog_loop.sh" || { setsid nohup bash "$SRC/mail_watchdog_loop.sh" >/dev/null 2>&1 & log "started mail_watchdog"; }
+is_running "doink_watchdog_loop.sh" || { setsid nohup bash "$SRC/doink_watchdog_loop.sh" >/dev/null 2>&1 & log "started doink_watchdog"; }
+is_running "lazada_autopilot_loop.sh" || { setsid nohup bash "$SRC/lazada_autopilot_loop.sh" >/dev/null 2>&1 & log "started lazada_autopilot"; }
+
+# 6. Report.
+up=0
+for s in "node server.mjs" "afcashier_loop.sh" "mail_watchdog_loop.sh" "doink_watchdog_loop.sh" "novnc_watchdog.sh"; do
+  is_running "$s" && up=$((up+1)) || log "STILL DOWN: $s"
+done
+log "af-up done: $up/5 services running"

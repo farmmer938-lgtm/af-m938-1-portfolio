@@ -9,7 +9,7 @@ while true; do
     if [ ! -f "$RESTORED" ]; then
       echo "$(date -Is) websockify down -> restoring (first time this boot)" >> "$LOG"
       rm -f /workspace/.novnc-profile/Singleton* 2>/dev/null
-      ( cd /workspace/af-m938-1-portfolio/m938-2 && bash src/restore_novnc.sh ) >> "$LOG" 2>&1 \
+      ( cd "$(dirname "$0")" && bash restore_novnc.sh ) >> "$LOG" 2>&1 \
         && touch "$RESTORED"
     else
       echo "$(date -Is) websockify down (already restored once this boot; manual check needed)" >> "$LOG"

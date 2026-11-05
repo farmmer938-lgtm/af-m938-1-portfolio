@@ -6,6 +6,11 @@
 # clean Chromium profile. Safe to run repeatedly. Log: /workspace/.selfheal.log
 set -u
 LOG=/workspace/.selfheal.log
+# /workspace survives restarts and apt prints a lot, so cap the log; otherwise a
+# single busy boot wrote >1 GB here.
+if [ -f "$LOG" ] && [ "$(stat -c%s "$LOG" 2>/dev/null || echo 0)" -gt 5242880 ]; then
+  tail -c 1000000 "$LOG" > "$LOG.tmp" 2>/dev/null && mv "$LOG.tmp" "$LOG"
+fi
 log() { echo "$(date -Is) $*" | tee -a "$LOG"; }
 
 # 1. `python3` must resolve. On this image a restart can leave /usr/bin/python3 a

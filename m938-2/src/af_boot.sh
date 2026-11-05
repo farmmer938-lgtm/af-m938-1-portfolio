@@ -1,31 +1,7 @@
 #!/usr/bin/env bash
 # Bring AF's unattended m938-2 services back after a container restart.
-# A restart wipes the container rootfs (apt/pip pkgs, processes) but keeps /workspace,
-# so this reinstalls what's missing and relaunches everything. Idempotent.
+# A restart wipes the container rootfs (apt/pip pkgs, processes) but keeps /workspace.
+# Kept for compatibility; the real work lives in af_up.sh (identity-checked, idempotent).
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
-
-# 0. self-heal the wiped rootfs first (python3 symlink, noVNC packages, profile locks)
-bash "$HERE/selfheal.sh"
-
-# 1. noVNC desktop (Xvfb + chromium CDP :9222 + x11vnc + websockify :12001)
-bash "$HERE/restore_novnc.sh"
-rm -f /workspace/.novnc-restored
-
-# 2. noVNC watchdog (self-heals the desktop)
-pgrep -f novnc-watchdog.sh >/dev/null || setsid nohup /workspace/.novnc-watchdog.sh >/dev/null 2>&1 &
-
-# 3. Lazada onboarding autopilot (creates the app once the profile is approved)
-python3 -c "import websocket" 2>/dev/null || pip install -q websocket-client
-setsid nohup bash "$HERE/lazada_autopilot_loop.sh" >/dev/null 2>&1 &
-
-# 4. Do.ink order watchdog (the storefront is live; this is the revenue tripwire)
-setsid nohup bash "$HERE/doink_watchdog_loop.sh" >/dev/null 2>&1 &
-
-# 5. Gmail watchdog (order/payment/verification mail -> alerts)
-setsid nohup bash "$HERE/mail_watchdog_loop.sh" >/dev/null 2>&1 &
-
-# 6. x402 cashier (the money intake: sells DataBridge per call, USDC on Base)
-command -v node >/dev/null 2>&1 && setsid nohup bash "$HERE/afcashier_loop.sh" >/dev/null 2>&1 &
-
-echo "AF m938-2 services booted"
+exec bash "$HERE/af_up.sh"
