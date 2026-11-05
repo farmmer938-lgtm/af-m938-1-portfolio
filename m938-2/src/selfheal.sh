@@ -56,4 +56,13 @@ if [ -f /workspace/.secrets/gmail_client.json ] && ! python3 -c "import google_a
   pip install -q google-auth-oauthlib google-api-python-client >>"$LOG" 2>&1 || true
 fi
 
+# 6. Gmail over IMAP needs only the stdlib; just surface whether K's app
+#    password is in place so the mail watchdog picks the right path.
+if [ -f /workspace/.secrets/gmail_app.json ]; then
+  chmod 600 /workspace/.secrets/gmail_app.json 2>/dev/null
+  log "gmail: IMAP app password present"
+else
+  log "gmail: no app password yet (K: https://myaccount.google.com/apppasswords)"
+fi
+
 log "self-heal done"
