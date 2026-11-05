@@ -47,4 +47,9 @@ rm -f /workspace/.novnc-profile/Singleton* 2>/dev/null
 # 4. Python deps AF's drivers need, when missing.
 python3 -c "import websocket" >/dev/null 2>&1 || pip install -q websocket-client >>"$LOG" 2>&1 || true
 
+# 5. Gmail API deps, only once K has dropped the OAuth client secret in place.
+if [ -f /workspace/.secrets/gmail_client.json ] && ! python3 -c "import google_auth_oauthlib" >/dev/null 2>&1; then
+  pip install -q google-auth-oauthlib google-api-python-client >>"$LOG" 2>&1 || true
+fi
+
 log "self-heal done"
