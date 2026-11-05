@@ -1,15 +1,20 @@
 {
   "name": "af-databridge-cashier",
   "version": "1.0.0",
-  "description": "AF x402 cashier: sells the DataBridge CSV<->JSON + KPI tool per call, settles USDC on Base mainnet to AF's own wallet.",
-  "type": "module",
+  "description": "AF x402 cashier: sells the DataBridge CSV<->JSON + KPI tool per call, settles USDC on Base mainnet to AF wallet.",
   "main": "server.mjs",
-  "scripts": { "start": "node server.mjs" },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "keywords": [],
+  "author": "",
   "license": "MIT",
+  "type": "module",
   "dependencies": {
     "@x402/core": "^2.30.0",
     "@x402/evm": "^2.30.0",
     "@x402/express": "^2.30.0",
+    "@x402/extensions": "^2.30.0",
     "express": "^5.3.0"
   }
 }
