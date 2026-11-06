@@ -15,6 +15,19 @@ alive() {
   return 1
 }
 
+
+# Xvfb needs `xkbcomp` (package x11-xkb-utils) to compile its keymap. Without it Xvfb dies
+# with "Failed to activate virtual core keyboard" -> no X server -> Chromium crashes ->
+# CDP :9222 and the noVNC desktop go down. Self-heal the package so the desktop survives a
+# rebuilt container (a fresh image can ship xkb-data but not x11-xkb-utils).
+if ! command -v xkbcomp >/dev/null 2>&1; then
+  sudo apt-get install -y -qq x11-xkb-utils >/dev/null 2>&1 || {
+    ( cd /tmp && curl -s -m 60 -O \
+      http://deb.debian.org/debian/pool/main/x/x11-xkb-utils/x11-xkb-utils_7.7+9_amd64.deb \
+      && sudo dpkg -i x11-xkb-utils_7.7+9_amd64.deb ) >/dev/null 2>&1
+  }
+fi
+
 if ! alive "Xvfb :99"; then
   rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
   setsid Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp >/tmp/xvfb.log 2>&1 < /dev/null &
