@@ -59,8 +59,17 @@ def main() -> int:
     counts = read_counts(t)
     total = counts.get("ทั้งหมด", 0)
     if counts.get("_session"):
-        log("SESSION EXPIRED: Do.ink is showing the sign-in screen; order data unavailable (K must log in via noVNC)")
-        return 0
+        # Self-heal instead of nagging a human: the persistent profile holds the saved
+        # login, so re-run autologin and retry once before giving up.
+        import subprocess
+        subprocess.run(["python3", "/workspace/project/AX_MASTER_BRAIN/tools/af_autologin.py", "doink"],
+                       capture_output=True, timeout=120)
+        t = Tab.for_url("app.do.ink")
+        counts = read_counts(t)
+        total = counts.get("ทั้งหมด", 0)
+    if counts.get("_session"):
+        log("SESSION EXPIRED: Do.ink sign-in screen; autologin did not restore it (AF blocker, no human step)")
+        return 1
     log("orders: %s" % json.dumps({k: v for k, v in counts.items() if not k.startswith("_")}, ensure_ascii=False))
     if total > 0:
         rows = t.js("""[...document.querySelectorAll('a[href*="/orders/"]')].map(a=>a.innerText.replace(/\\s+/g,' ').slice(0,80)).slice(0,5)""")
