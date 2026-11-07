@@ -45,6 +45,16 @@ def lazada(t: Tab) -> bool:
 
 
 def main() -> int:
+    # Try to restore any expired session before reporting: the persistent profile
+    # holds the owner's saved logins, so an expired session is usually self-healable
+    # and must not be reported as "needs K".
+    try:
+        import subprocess
+        for site in ("lazada", "doink"):
+            subprocess.run(["python3", "/workspace/project/AX_MASTER_BRAIN/tools/af_autologin.py", site],
+                           capture_output=True, timeout=90)
+    except Exception:
+        pass
     t = Tab.for_url("app.do.ink")
     st = {"checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     try:
