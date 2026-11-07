@@ -76,7 +76,18 @@ if [ -f "$GUARD" ]; then
   python3 "$GUARD" >>/workspace/.products-guard.log 2>&1 && log "products-guard ran" || log "products-guard FAILED"
 fi
 
-# 6. Report.
+# 6. Browser autologin: once noVNC/chromium is up, log into sites the owner saved
+#    once in the persistent profile. Chrome's own password manager fills the form
+#    and AF clicks submit, so a restart no longer means "wait for K to log in".
+AUTOLOGIN=/workspace/project/AX_MASTER_BRAIN/tools/af_autologin.py
+if [ -f "$AUTOLOGIN" ]; then
+  for s in lazada doink; do
+    python3 "$AUTOLOGIN" "$s" >>/workspace/.autologin.log 2>&1 \
+      && log "autologin $s ok" || log "autologin $s failed (see .autologin.log)"
+  done
+fi
+
+# 7. Report.
 up=0
 for s in "node server.mjs" "afcashier_loop.sh" "mail_watchdog_loop.sh" "doink_watchdog_loop.sh" "novnc_watchdog.sh"; do
   is_running "$s" && up=$((up+1)) || log "STILL DOWN: $s"
