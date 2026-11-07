@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Complete the Lazada seller authorization with a single K action (project m938-2).
+"""Complete the Lazada seller authorization with no human (project m938-2).
 
-K logs into the Lazada seller account once in the noVNC browser; this script does
-the rest: it opens the OAuth authorize URL, waits for the callback URL to carry the
-authorization code, exchanges it for an access token and saves it.
+AF logs into the Lazada seller account itself (tools/af_autologin.py uses the saved
+profile login); this script does the rest: it opens the OAuth authorize URL, waits for
+the callback URL to carry the authorization code, exchanges it for an access token
+and saves it. K is not in the loop.
 
 Why this exists: the Lazada Open Platform app (Seller In-house APP) can only call
 the API for a shop that has authorized it. Authorization needs the seller's own
-login, so K taps once and AF keeps the token fresh afterwards.
+login, which AF now performs itself; AF then keeps the token fresh afterwards.
 
 Usage:
   python3 lazada_authorize.py url                 # print the authorize URL
