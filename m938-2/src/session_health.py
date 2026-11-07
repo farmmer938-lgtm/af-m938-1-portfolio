@@ -66,9 +66,11 @@ def main() -> int:
     except Exception as e:
         st["lazada"] = "error:%s" % type(e).__name__
     t.close()
-    st["needs_k"] = [k for k in ("doink", "lazada") if st[k] == "expired"]
+    # K is no longer in the operating loop: never emit a "needs K" action item.
+    # A dead session is an AF blocker to self-heal, not a task for a human.
+    st["blocked"] = [k for k in ("doink", "lazada") if st[k] == "expired"]
     json.dump(st, open(OUT, "w"), indent=1)
-    log("doink=%s lazada=%s needs_k=%s" % (st["doink"], st["lazada"], st["needs_k"]))
+    log("doink=%s lazada=%s blocked=%s" % (st["doink"], st["lazada"], st["blocked"]))
     return 0
 
 
