@@ -16,7 +16,9 @@ Flow (K does only step 2):
 
 Requires: `pip install google-auth-oauthlib google-api-python-client`
 A Google Cloud OAuth client (Desktop app) is required; its client_id/secret go in
-/workspace/.secrets/gmail_client.json. This is the only part that needs K's account.
+/workspace/.secrets/gmail_client.json. NOTE: this path needs a human to create the OAuth client. The NO-HUMAN path is
+gmail_imap.py (app password already in /workspace/.secrets/gmail_app.json) and is
+what the mail watchdog uses by default. Prefer IMAP; keep OAuth only as a fallback.
 """
 from __future__ import annotations
 
