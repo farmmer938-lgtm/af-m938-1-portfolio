@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Keep waiting for K's one-time Lazada seller authorization, then exchange the code
-# for an access token (project m938-2). Idempotent; safe to run in a loop.
+# Wait for the Lazada seller authorization (AF logs in itself; no K), then exchange
+# the code for an access token (project m938-2). Idempotent; safe to run in a loop.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TOK=/workspace/.secrets/lazada.json
