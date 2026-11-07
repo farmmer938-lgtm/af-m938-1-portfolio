@@ -69,7 +69,7 @@ def main() -> int:
     t = Tab.for_url("mail.google.com")
     msgs = read_inbox(t)
     if not msgs:
-        log("GMAIL UNAVAILABLE: not logged in (K must sign in via noVNC)")
+        log("GMAIL UNAVAILABLE via browser; IMAP path (gmail_imap.py) is the durable one — no human step")
         return 0
     try:
         seen = set(json.load(open(SEEN)))
