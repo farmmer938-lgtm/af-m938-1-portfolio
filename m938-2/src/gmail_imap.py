@@ -49,15 +49,28 @@ def log(msg: str) -> None:
 
 
 def _load():
-    if not os.path.exists(CRED):
-        sys.exit(
-            f"missing {CRED}: K must create a Gmail app password at "
-            "https://myaccount.google.com/apppasswords and store "
-            '{"address":"...@gmail.com","app_password":"xxxxxxxxxxxxxxxx"} there'
-        )
-    with open(CRED) as f:
-        d = json.load(f)
-    return d["address"], d["app_password"].replace(" ", "")
+    if os.path.exists(CRED):
+        with open(CRED) as f:
+            d = json.load(f)
+        return d["address"], d["app_password"].replace(" ", "")
+    # One-time AF store fallback (tools/af_secretstore.py): the shared password
+    # entered once, resolved for this mailbox. Only used when the dedicated
+    # app-password file is absent, so the working path above is never affected.
+    store = os.environ.get("AF_SECRETS_DIR", "/workspace/.secrets") + "/af_master.json"
+    addr = os.environ.get("GMAIL_ADDRESS") or os.environ.get("AF_MAILBOX")
+    if os.path.exists(store) and addr:
+        with open(store) as f:
+            d = json.load(f)
+        acct = (d.get("accounts") or {}).get(addr) or {}
+        pw = acct.get("password") or d.get("master_password")
+        if pw:
+            return addr, pw.replace(" ", "")
+    sys.exit(
+        f"missing {CRED}: K must create a Gmail app password at "
+        "https://myaccount.google.com/apppasswords and store "
+        '{"address":"...@gmail.com","app_password":"xxxxxxxxxxxxxxxx"} there, '
+        "or set the shared password once via tools/af_secretstore.py"
+    )
 
 
 def connect():
