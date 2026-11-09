@@ -94,6 +94,15 @@ def main() -> int:
         except Exception:
             old = []
         json.dump((old + alerts)[-100:], open(ALERTS, "w"), ensure_ascii=False, indent=1)
+        try:
+            from af_notify import alert
+            for a in alerts[:5]:
+                text = (a.get("text") or "").strip()
+                slug = "mail-" + re.sub(r"[^a-z0-9]+", "-", text.lower())[:40].strip("-")
+                alert(slug, "AF: actionable mail — %s" % text[:70],
+                      "The mailbox watchdog flagged this message as needing action.\n\n> %s" % text)
+        except Exception:
+            pass
     return 0
 
 
