@@ -68,6 +68,18 @@ is_running "mail_watchdog_loop.sh" || { setsid nohup bash "$SRC/mail_watchdog_lo
 is_running "doink_watchdog_loop.sh" || { setsid nohup bash "$SRC/doink_watchdog_loop.sh" >/dev/null 2>&1 & log "started doink_watchdog"; }
 is_running "lazada_autopilot_loop.sh" || { setsid nohup bash "$SRC/lazada_autopilot_loop.sh" >/dev/null 2>&1 & log "started lazada_autopilot"; }
 
+# 6b. AF supervisor (watchdog-of-watchdogs): keeps every loop above alive, refreshes
+#     the status file + dashboard, and starts the portfolio autopilot. Must run after
+#     the loops so it can adopt them.
+SUP=/workspace/project/AX_MASTER_BRAIN/af_supervisor_loop.sh
+if [ -f "$SUP" ]; then
+  is_running "af_supervisor_loop.sh" || { setsid nohup bash "$SUP" >/dev/null 2>&1 & log "started af_supervisor"; }
+fi
+PORT=/workspace/project/AX_MASTER_BRAIN/tools/af_portfolio_loop.sh
+if [ -f "$PORT" ]; then
+  is_running "af_portfolio_loop.sh" || { setsid nohup bash "$PORT" >/dev/null 2>&1 & log "started af_portfolio"; }
+fi
+
 # 7. Revenue products: verify the public mirror still serves every file the
 #    OpenTask bids cite; re-publish from the durable git copy if missing. This
 #    is what keeps bid proofs from rotting after a restart (no human needed).
