@@ -57,6 +57,10 @@ rm -f /workspace/.novnc-profile/Singleton* 2>/dev/null
 python3 -c "import websocket" >/dev/null 2>&1 || pip install -q websocket-client >>"$LOG" 2>&1 || true
 # g4f powers AF's >=5 external AI advisors (tools/af_advisor.py); it vanishes on restart.
 python3 -c "import g4f" >/dev/null 2>&1 || pip install -q g4f >>"$LOG" 2>&1 || true
+# cryptography signs OpenTask DPoP proofs (tools/af_opentask_dpop.py); pytest runs the suites.
+python3 -c "import cryptography" >/dev/null 2>&1 || pip install -q cryptography >>"$LOG" 2>&1 || true
+# web3 moves USDC to K once the balance passes the treasury threshold (tools/af_treasury.py).
+python3 -c "import web3" >/dev/null 2>&1 || pip install -q web3 >>"$LOG" 2>&1 || true
 
 # 5. Gmail API deps, only once K has dropped the OAuth client secret in place.
 if [ -f /workspace/.secrets/gmail_client.json ] && ! python3 -c "import google_auth_oauthlib" >/dev/null 2>&1; then
