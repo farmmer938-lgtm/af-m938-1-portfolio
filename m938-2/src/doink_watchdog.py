@@ -19,6 +19,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from browser_drive import Tab  # noqa: E402
+from af_notify import alert  # noqa: E402
 
 LOG = "/workspace/.doink-orders.log"
 FIRST = "/workspace/.doink-first-order.json"
@@ -69,6 +70,11 @@ def main() -> int:
         total = counts.get("ทั้งหมด", 0)
     if counts.get("_session"):
         log("SESSION EXPIRED: Do.ink sign-in screen; autologin did not restore it (AF blocker, no human step)")
+        alert("doink-session-expired",
+              "AF: Do.ink session expired — autologin could not restore it",
+              "The Do.ink watchdog found the sign-in screen and its autologin (cookies then "
+              "password) did not restore the session.\n\nAF will keep retrying each cycle. "
+              "No human step is required; this is a self-heal blocker.")
         return 1
     log("orders: %s" % json.dumps({k: v for k, v in counts.items() if not k.startswith("_")}, ensure_ascii=False))
     if total > 0:
@@ -77,6 +83,10 @@ def main() -> int:
         with open(FIRST, "w") as f:
             json.dump(payload, f, ensure_ascii=False, indent=1)
         log("*** FIRST ORDER DETECTED *** %s" % json.dumps(payload, ensure_ascii=False)[:400])
+        alert("doink-first-order",
+              "AF: FIRST Do.ink order detected",
+              "An order appeared on the Do.ink storefront. This is the mission's first real "
+              "revenue signal.\n\n```json\n%s\n```" % json.dumps(payload, ensure_ascii=False, indent=1)[:3000])
     return 0
 
 
