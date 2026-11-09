@@ -61,6 +61,9 @@ python3 -c "import g4f" >/dev/null 2>&1 || pip install -q g4f >>"$LOG" 2>&1 || t
 python3 -c "import cryptography" >/dev/null 2>&1 || pip install -q cryptography >>"$LOG" 2>&1 || true
 # web3 moves USDC to K once the balance passes the treasury threshold (tools/af_treasury.py).
 python3 -c "import web3" >/dev/null 2>&1 || pip install -q web3 >>"$LOG" 2>&1 || true
+# eth_account/eth_utils sign the CoW gasless swaps (tools/af_cow_swap.py) and read
+# token EIP-712 domains; web3 alone does not always pull them in on a fresh rootfs.
+python3 -c "import eth_account" >/dev/null 2>&1 || pip install -q eth-account eth-utils >>"$LOG" 2>&1 || true
 
 # 5. Gmail API deps, only once K has dropped the OAuth client secret in place.
 if [ -f /workspace/.secrets/gmail_client.json ] && ! python3 -c "import google_auth_oauthlib" >/dev/null 2>&1; then
