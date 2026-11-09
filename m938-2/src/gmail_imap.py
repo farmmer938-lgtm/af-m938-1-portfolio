@@ -156,7 +156,24 @@ def cmd_read() -> int:
         except Exception:
             old = []
         json.dump((old + alerts)[-100:], open(ALERTS, "w"), ensure_ascii=False, indent=1)
+        notify_mail(alerts)
     return 0
+
+
+def notify_mail(alerts: list) -> None:
+    """Raise one af-alert issue per fresh flagged mail (idempotent per subject)."""
+    try:
+        sys.path.insert(0, "/workspace/afsrc")
+        from af_notify import alert
+    except Exception:
+        return
+    for a in alerts[:5]:
+        text = (a.get("text") or "").strip()
+        slug = "mail-" + re.sub(r"[^a-z0-9]+", "-", text.lower())[:40].strip("-")
+        alert(slug, "AF: actionable mail — %s" % text[:70],
+              "The mailbox watchdog flagged this message as needing action "
+              "(order / payment / verification / security).\n\n> %s\n\nReceived: %s"
+              % (text, a.get("at", "")))
 
 
 def cmd_set(address: str, password: str) -> int:
