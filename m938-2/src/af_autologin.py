@@ -20,6 +20,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -27,6 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cdp import Tab, find, targets  # noqa: E402
 
+STORE = "/workspace/.secrets/af_master.json"
 SITES = {
     "lazada": {
         "match": "isvconsole.lazada.com",
@@ -47,6 +50,58 @@ SITES = {
 }
 
 
+def saved_cookies(site: str) -> list:
+    """Session cookies captured earlier for this site (empty if none)."""
+    try:
+        acct = (json.load(open(STORE)).get("accounts", {}) or {}).get(site, {}) or {}
+    except Exception:
+        return []
+    return acct.get("session_cookies") or []
+
+
+def inject_cookies(tab: Tab, cookies: list) -> int:
+    """Replay saved cookies into Chromium so a fresh profile is logged in.
+
+    This is the durable path: unlike Chrome's password autofill, it survives a
+    container restart because the cookies live in af_master.json. Only the
+    site's own cookies are injected, never a password.
+    """
+    n = 0
+    for c in cookies:
+        if not c.get("name") or not c.get("value"):
+            continue
+        params = {"name": c["name"], "value": c["value"],
+                  "domain": c.get("domain") or "", "path": c.get("path") or "/",
+                  "secure": bool(c.get("secure")), "httpOnly": bool(c.get("httpOnly"))}
+        exp = c.get("expires")
+        if isinstance(exp, (int, float)) and exp > 0:
+            params["expires"] = int(exp)
+        try:
+            tab.call("Network.setCookie", **params)
+            n += 1
+        except Exception:
+            pass
+    return n
+
+
+def login_with_cookies(cfg: dict, wait: int = 25) -> dict:
+    """Try the saved-cookie route before touching any form."""
+    cks = saved_cookies(cfg.get("_key", ""))
+    if not cks:
+        return {"ok": False, "reason": "no saved cookies"}
+    tab = _open(cfg["url"])
+    tab.call("Page.enable")
+    tab.call("Network.enable")
+    n = inject_cookies(tab, cks)
+    tab.eval("location.href=%r" % cfg["url"])
+    for _ in range(wait):
+        time.sleep(1)
+        url = tab.eval("location.href") or ""
+        if cfg["logged_in"] in url:
+            return {"ok": True, "via": "cookies", "injected": n, "url": url}
+    return {"ok": False, "reason": "cookies not enough", "injected": n}
+
+
 def _open(url: str) -> Tab:
     """Reuse an existing tab for the site, or open a new one via CDP."""
     import json
@@ -63,7 +118,73 @@ def _open(url: str) -> Tab:
     return Tab(find(url.split("//")[1].split("/")[0]))
 
 
+def account_email(site: str) -> str:
+    try:
+        return ((json.load(open(STORE)).get("accounts", {}) or {}).get(site, {}) or {}).get("email", "")
+    except Exception:
+        return ""
+
+
+def login_with_password(cfg: dict, wait: int = 25) -> dict:
+    """Fill the site's own login form with the stored account + shared password.
+
+    Last resort for when the session cookies have expired. The password is typed
+    with real key events and never logged or printed.
+    """
+    sys.path.insert(0, "/workspace/afsrc")
+    try:
+        import af_secretstore as S
+    except Exception:
+        return {"ok": False, "reason": "no secretstore"}
+    site = cfg.get("_key", "")
+    email = account_email(site)
+    pw = S.password_for(email) if email else S.master_password()
+    if not (email and pw):
+        return {"ok": False, "reason": "no stored credentials"}
+
+    tab = _open(cfg["url"])
+    tab.call("Page.bringToFront")
+    time.sleep(3)
+    if cfg["logged_in"] in (tab.eval("location.href") or ""):
+        return {"ok": True, "already": True, "url": tab.eval("location.href")}
+    if not tab.eval("!!document.querySelector(%s)" % json.dumps(cfg["user_field"])):
+        return {"ok": False, "reason": "no login form"}
+    tab.type_text(cfg["user_field"], email)
+    time.sleep(0.6)
+    tab.type_text(cfg["pw_field"], pw)
+    time.sleep(0.6)
+    box = tab.eval(
+        "(()=>{const b=[...document.querySelectorAll('button,[role=button],input[type=submit],a')]"
+        ".find(e=>new RegExp(%r,'i').test((e.innerText||e.value||''))&&e.offsetParent);"
+        "if(!b)return null;b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();"
+        "return {x:r.x+r.width/2,y:r.y+r.height/2};})()" % cfg["btn_text"])
+    if not box:
+        return {"ok": False, "reason": "no submit button"}
+    tab.call("Input.dispatchMouseEvent", type="mouseMoved", x=box["x"], y=box["y"])
+    tab.call("Input.dispatchMouseEvent", type="mousePressed", x=box["x"], y=box["y"],
+             button="left", buttons=1, clickCount=1)
+    tab.call("Input.dispatchMouseEvent", type="mouseReleased", x=box["x"], y=box["y"],
+             button="left", buttons=0, clickCount=1)
+    for _ in range(wait):
+        time.sleep(1)
+        url = tab.eval("location.href") or ""
+        if cfg["logged_in"] in url:
+            return {"ok": True, "via": "password", "url": url}
+    return {"ok": False, "reason": "did not reach logged-in url", "url": tab.eval("location.href")}
+
+
 def autologin(cfg: dict, wait: int = 25) -> dict:
+    # Route 1: replay saved cookies. Works after a container restart because the
+    # cookies are stored on disk, unlike Chrome's password autofill.
+    if cfg.get("_key"):
+        cookie_try = login_with_cookies(cfg, wait=min(wait, 20))
+        if cookie_try.get("ok"):
+            return cookie_try
+        pw_try = login_with_password(cfg, wait=wait)
+        if pw_try.get("ok"):
+            return pw_try
+        return pw_try
+
     tab = _open(cfg["url"])
     tab.call("Page.bringToFront")
     time.sleep(2)
@@ -116,6 +237,7 @@ def main() -> int:
         cfg = SITES.get(a.site)
         if not cfg:
             sys.exit(f"unknown site {a.site!r}; known: {list(SITES)}")
+        cfg = dict(cfg, _key=a.site)
     else:
         cfg = {"url": a.url, "user_field": a.field, "pw_field": a.pw,
                "btn_text": a.btn_text or "log in", "logged_in": a.logged_in or ""}
