@@ -76,6 +76,14 @@ if [ -f "$GUARD" ]; then
   python3 "$GUARD" >>/workspace/.products-guard.log 2>&1 && log "products-guard ran" || log "products-guard FAILED"
 fi
 
+# 7b. Publish the live public endpoint. The sandbox host embeds the container
+#     RUNTIME_ID, so the cashier's public URL changes on every restart; monitors and
+#     buyers resolve it from this manifest instead of remembering a stale host.
+PUBLISH=/workspace/project/AX_MASTER_BRAIN/tools/af_publish_endpoint.py
+if [ -f "$PUBLISH" ]; then
+  python3 "$PUBLISH" >>/workspace/.endpoint-publish.log 2>&1 && log "endpoint published" || log "endpoint publish skipped"
+fi
+
 # 6. Browser autologin: once noVNC/chromium is up, log into sites the owner saved
 #    once in the persistent profile. Chrome's own password manager fills the form
 #    and AF clicks submit, so a restart no longer means "wait for K to log in".
