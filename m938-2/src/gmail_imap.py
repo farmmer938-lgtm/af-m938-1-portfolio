@@ -53,6 +53,12 @@ def _load():
         with open(CRED) as f:
             d = json.load(f)
         return d["address"], d["app_password"].replace(" ", "")
+    # Env fallback: the app password stored as an OpenHands secret survives a
+    # container restart, unlike the 0600 file above which lives on ephemeral disk.
+    addr_env = os.environ.get("GMAIL_ADDRESS")
+    pw_env = os.environ.get("GMAIL_APP_PASSWORD")
+    if addr_env and pw_env:
+        return addr_env, pw_env.replace(" ", "")
     # One-time AF store fallback (tools/af_secretstore.py): the shared password
     # entered once, resolved for this mailbox. Only used when the dedicated
     # app-password file is absent, so the working path above is never affected.
