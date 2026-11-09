@@ -12,8 +12,12 @@ import { csvToJson, score } from "./databridge.mjs";
 const PAY_TO = process.env.AF_PAY_TO || "0xf3C99a6d6e7C6b2ae00b44dC42cC3eb7691D7702";
 const PRICE = process.env.AF_PRICE || "$0.05";
 const NET = "eip155:8453"; // Base mainnet
-// Public base URL, used as the canonical resource id that CDP Bazaar indexes.
-const PUBLIC = process.env.AF_PUBLIC_URL || "https://work-1-mbagwhmoyaqtbyvu.prod-runtime.all-hands.dev";
+// Public base URL, used as the canonical resource id that CDP Bazaar indexes. The host
+// embeds the container RUNTIME_ID, so derive it from the live environment when no explicit
+// override is set; a hardcoded host goes stale on restart and buyers then hit a dead URL.
+const PUBLIC = process.env.AF_PUBLIC_URL
+  || (process.env.RUNTIME_URL ? "https://work-1-" + process.env.RUNTIME_URL.replace(/^https?:\/\//, "") : null)
+  || "https://work-1-mbagwhmoyaqtbyvu.prod-runtime.all-hands.dev";
 
 const app = express();
 app.use(express.json());
