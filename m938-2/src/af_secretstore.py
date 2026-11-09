@@ -88,6 +88,29 @@ def _get_secret(name: str):
         return None
 
 
+def get(name: str, cache: bool = True):
+    """Resolve any secret: env -> sandbox store -> on-disk store. Caches hits."""
+    v = os.environ.get(name)
+    if v:
+        return v
+    v = _get_secret(name)
+    if v:
+        if cache:
+            _cache_named(name, v)
+        return v
+    d = _read_store()
+    if name in MASTER_NAMES:
+        return d.get("master_password")
+    return ((d.get("secrets") or {}).get(name, {}) or {}).get("value") \
+        or (d.get("accounts") or {}).get(name, {}).get("password")
+
+
+def _cache_named(name: str, val: str) -> None:
+    d = _read_store()
+    d.setdefault("secrets", {})[name] = {"value": val, "updated_at": _now()}
+    _write_store(d)
+
+
 def master_password(cache: bool = True):
     """Resolve the shared password from every available source."""
     for name in MASTER_NAMES:
@@ -157,6 +180,7 @@ def main() -> int:
     p = sub.add_parser("set")
     p.add_argument("--from-env", metavar="NAME")
     p.add_argument("--stdin", action="store_true")
+    p.add_argument("--name", help="store under this secret name (e.g. GITHUB_TOKEN)")
     p.add_argument("--account", help="store for one account instead of the master")
     p.add_argument("--no-master", action="store_true",
                    help="do not also set the shared master password")
@@ -191,7 +215,10 @@ def main() -> int:
         d.setdefault("schema", 1)
         d.setdefault("created_at", _now())
         d["updated_at"] = _now()
-        if a.account:
+        if a.name:
+            d.setdefault("secrets", {})[a.name] = {"value": val, "updated_at": _now()}
+            print(f"stored secret {a.name} ({len(val)} chars)")
+        elif a.account:
             d.setdefault("accounts", {})[a.account] = {"password": val, "updated_at": _now()}
             print(f"stored password for {a.account} ({len(val)} chars)")
             if not a.no_master:
@@ -209,7 +236,11 @@ def main() -> int:
         v = os.environ.get(a.name) or _get_secret(a.name)
         if not v:
             d = _read_store()
-            v = d.get("master_password") if a.name in MASTER_NAMES else (d.get("accounts") or {}).get(a.name, {}).get("password")
+            if a.name in MASTER_NAMES:
+                v = d.get("master_password")
+            else:
+                v = ((d.get("secrets") or {}).get(a.name, {}) or {}).get("value") \
+                    or (d.get("accounts") or {}).get(a.name, {}).get("password")
         if not v:
             print("not found", file=sys.stderr)
             return 1
