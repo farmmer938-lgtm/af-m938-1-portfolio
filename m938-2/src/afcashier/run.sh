@@ -20,6 +20,11 @@ fi
 if [ -z "${AF_PAY_TO:-}" ] && [ -n "${AF_MAIN_WALLET:-}" ]; then
   export AF_PAY_TO="$(python3 -c "import os,json;print(json.loads(os.environ['AF_MAIN_WALLET'])['address'])" 2>/dev/null)"
 fi
+# Solana payout address (AF's own key). Without it the cashier simply offers the Base rail
+# only, so a missing secret degrades gracefully instead of crashing the money intake.
+if [ -z "${AF_SVM_PAY_TO:-}" ] && [ -f /workspace/.secrets/af_solana.json ]; then
+  export AF_SVM_PAY_TO="$(python3 -c "import json;print(json.load(open('/workspace/.secrets/af_solana.json'))['address'])" 2>/dev/null)"
+fi
 setsid nohup node server.mjs >>"$LOG" 2>&1 &
 echo $! > "$PID"
 echo "afcashier started pid=$(cat "$PID")"
