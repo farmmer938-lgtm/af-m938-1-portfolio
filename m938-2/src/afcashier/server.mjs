@@ -3,6 +3,9 @@
 // no human in the loop: an agent hits the endpoint, gets a 402 with the price,
 // signs an EIP-3009 transfer, retries, and gets the result.
 import express from "express";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { paymentMiddleware, x402ResourceServer } from "@x402/express";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
@@ -18,6 +21,9 @@ const NET = "eip155:8453"; // Base mainnet
 const PUBLIC = process.env.AF_PUBLIC_URL
   || (process.env.RUNTIME_URL ? "https://work-1-" + process.env.RUNTIME_URL.replace(/^https?:\/\//, "") : null)
   || "https://work-1-mbagwhmoyaqtbyvu.prod-runtime.all-hands.dev";
+// Directory whose contents are served verbatim at /.well-known/* (control proofs etc).
+const WELLKNOWN_DIR = process.env.AF_WELLKNOWN_DIR
+  || path.join(path.dirname(fileURLToPath(import.meta.url)), "well-known");
 
 const app = express();
 app.use(express.json());
@@ -168,6 +174,18 @@ app.get("/.well-known/x402", (_req, res) => res.json({
   openapi: `${PUBLIC}/openapi.json`,
   contact: "farmmer938@gmail.com",
 }));
+
+// Serve control proofs (OpenTask supplier ownership, and any other well-known files)
+// from disk under WELLKNOWN_DIR. The proof must be published verbatim at the exact
+// challenge URL, so this route mirrors the request path onto the filesystem.
+app.get(/^\/\.well-known\/.+/, (req, res) => {
+  const rel = req.path.replace(/^\/\.well-known\//, "");
+  const file = path.join(WELLKNOWN_DIR, path.normalize(rel));
+  if (!file.startsWith(WELLKNOWN_DIR) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    return res.status(404).json({ error: "not found" });
+  }
+  res.type("application/json").send(fs.readFileSync(file));
+});
 
 app.post("/csv_to_json", (req, res) => {
   try { res.json({ ok: true, rows: csvToJson(String(req.body?.csv ?? "")) }); }
