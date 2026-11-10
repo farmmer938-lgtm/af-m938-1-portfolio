@@ -25,6 +25,11 @@ fi
 if [ -z "${AF_SVM_PAY_TO:-}" ] && [ -f /workspace/.secrets/af_solana.json ]; then
   export AF_SVM_PAY_TO="$(python3 -c "import json;print(json.load(open('/workspace/.secrets/af_solana.json'))['address'])" 2>/dev/null)"
 fi
+# Receipt signing key. A dedicated key (not the treasury key) so a compromised web-facing
+# process cannot move funds; it only lets AF sign its own track record.
+if [ -z "${AF_SIGNER_KEY:-}" ] && [ -f /workspace/.secrets/af_receipts.key ]; then
+  export AF_SIGNER_KEY="$(tr -d '\n' < /workspace/.secrets/af_receipts.key)"
+fi
 setsid nohup node server.mjs >>"$LOG" 2>&1 &
 echo $! > "$PID"
 echo "afcashier started pid=$(cat "$PID")"
