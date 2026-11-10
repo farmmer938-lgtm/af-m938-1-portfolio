@@ -11,10 +11,13 @@ import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { ExactSvmScheme } from "@x402/svm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { bazaarResourceServerExtension, declareDiscoveryExtension } from "@x402/extensions/bazaar";
-import { csvToJson, score } from "./databridge.mjs";
+import { csvToJson, csvToSql, score } from "./databridge.mjs";
 
 const PAY_TO = process.env.AF_PAY_TO || "0xf3C99a6d6e7C6b2ae00b44dC42cC3eb7691D7702";
 const PRICE = process.env.AF_PRICE || "$0.05";
+// The SQL emitter does more work per call (type inference + identifier quoting + literal
+// escaping for three dialects), so it is priced above the plain converter.
+const SQL_PRICE = process.env.AF_SQL_PRICE || "$0.08";
 const NET = "eip155:8453"; // Base mainnet
 // Solana mainnet (CAIP-2). PayAI is Solana-first and sponsors the network fee, so a buyer
 // needs only USDC — no SOL, and AF needs no gas to be paid. AF's Solana payout address comes
@@ -43,9 +46,9 @@ if (SVM_PAY_TO) resourceServer.register(SVM_NET, new ExactSvmScheme());
 // Payment options offered per resource: Base (USDC, EIP-3009) and — when AF has a Solana
 // payout address — Solana (USDC, facilitator-sponsored fee). Buyers pick whichever rail
 // their wallet already holds USDC on.
-const acceptsFor = (resource) => {
-  const a = [{ scheme: "exact", price: PRICE, network: NET, payTo: PAY_TO }];
-  if (SVM_PAY_TO) a.push({ scheme: "exact", price: PRICE, network: SVM_NET, payTo: SVM_PAY_TO });
+const acceptsFor = (price = PRICE) => {
+  const a = [{ scheme: "exact", price, network: NET, payTo: PAY_TO }];
+  if (SVM_PAY_TO) a.push({ scheme: "exact", price, network: SVM_NET, payTo: SVM_PAY_TO });
   return a;
 };
 
@@ -95,11 +98,34 @@ app.use(paymentMiddleware({
       output: { example: { ok: true, score: { score: 0.99, breakdown: [] } } },
     }),
   },
+  "POST /csv_to_sql": {
+    accepts: acceptsFor(SQL_PRICE),
+    resource: `${PUBLIC}/csv_to_sql`,
+    description: "Convert CSV text to runnable SQL: CREATE TABLE with inferred column types plus INSERT statements, for postgres, mysql or sqlite.",
+    mimeType: "application/json",
+    serviceName: "AF DataBridge",
+    tags: ["csv", "sql", "etl", "database", "schema", "ddl"],
+    extensions: declareDiscoveryExtension({
+      method: "POST",
+      bodyType: "json",
+      input: { csv: "name,age,active\nAnn,31,true", table: "people", dialect: "postgres" },
+      inputSchema: {
+        properties: {
+          csv: { type: "string" },
+          table: { type: "string" },
+          dialect: { type: "string", enum: ["postgres", "mysql", "sqlite"] },
+          delimiter: { type: "string" },
+        },
+        required: ["csv"],
+      },
+      output: { example: { ok: true, sql: { dialect: "postgres", ddl: "CREATE TABLE ...", dml: "INSERT INTO ...", columns: [] } } },
+    }),
+  },
 }, resourceServer));
 
 app.get("/", (_req, res) => res.json({
   name: "AF DataBridge (x402)",
-  tools: { "POST /csv_to_json": PRICE, "POST /kpi_score": PRICE },
+  tools: { "POST /csv_to_json": PRICE, "POST /kpi_score": PRICE, "POST /csv_to_sql": SQL_PRICE },
   network: NET, payTo: PAY_TO,
   rails: SVM_PAY_TO ? { base: PAY_TO, solana: SVM_PAY_TO } : { base: PAY_TO },
 }));
@@ -176,6 +202,33 @@ app.get("/openapi.json", (_req, res) => res.json({
         },
       },
     },
+    "/csv_to_sql": {
+      post: {
+        operationId: "csv_to_sql",
+        summary: "Convert CSV text to runnable SQL (DDL + INSERT)",
+        tags: ["Data"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.08" }, protocols: [{ x402: {} }] },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: {
+            type: "object",
+            properties: {
+              csv: { type: "string", minLength: 1, description: "CSV content with a header row." },
+              table: { type: "string", description: "Table name to create. Defaults to 'data'." },
+              dialect: { type: "string", enum: ["postgres", "mysql", "sqlite"], description: "SQL dialect. Defaults to postgres." },
+              delimiter: { type: "string", description: "Optional explicit delimiter; omit to auto-sniff." },
+            },
+            required: ["csv"],
+          } } },
+        },
+        responses: {
+          200: { description: "CREATE TABLE + INSERT SQL", content: { "application/json": { schema: {
+            type: "object", properties: { ok: { type: "boolean" }, sql: { type: "object" } }, required: ["ok", "sql"],
+          } } } },
+          402: { description: "Payment Required" },
+        },
+      },
+    },
   },
 }));
 // x402 discovery manifest. Indexers (x402scan, Bazaar crawlers) probe this well-known
@@ -184,10 +237,11 @@ app.get("/.well-known/x402", (_req, res) => {
   const rails = [{ net: NET, payTo: PAY_TO }];
   if (SVM_PAY_TO) rails.push({ net: SVM_NET, payTo: SVM_PAY_TO });
   const resources = [];
-  for (const r of [["csv_to_json", "Convert CSV text to typed JSON."],
-                   ["kpi_score", "Score weighted KPIs to 0..1."]]) {
+  for (const r of [["csv_to_json", "Convert CSV text to typed JSON.", PRICE],
+                   ["kpi_score", "Score weighted KPIs to 0..1.", PRICE],
+                   ["csv_to_sql", "Convert CSV text to runnable SQL (postgres/mysql/sqlite).", SQL_PRICE]]) {
     for (const rail of rails) {
-      resources.push({ resource: `${PUBLIC}/${r[0]}`, method: "POST", price: PRICE,
+      resources.push({ resource: `${PUBLIC}/${r[0]}`, method: "POST", price: r[2],
                        network: rail.net, payTo: rail.payTo, description: r[1] });
     }
   }
@@ -209,6 +263,13 @@ app.get(/^\/\.well-known\/.+/, (req, res) => {
 app.post("/csv_to_json", (req, res) => {
   try { res.json({ ok: true, rows: csvToJson(String(req.body?.csv ?? "")) }); }
   catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
+});
+app.post("/csv_to_sql", (req, res) => {
+  try {
+    res.json({ ok: true, sql: csvToSql(String(req.body?.csv ?? ""), {
+      dialect: req.body?.dialect, table: req.body?.table, delimiter: req.body?.delimiter,
+    }) });
+  } catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
 });
 app.post("/kpi_score", (req, res) => {
   try { res.json({ ok: true, score: score(req.body?.metrics ?? []) }); }
