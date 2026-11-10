@@ -5,7 +5,10 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PID=/workspace/.afcashier.pid
 LOG=/workspace/.afcashier.log
-if [ -f "$PID" ] && kill -0 "$(cat "$PID" 2>/dev/null)" 2>/dev/null; then
+# A zombie (defunct) process still passes `kill -0`, which would make this guard
+# believe the cashier is up forever. Treat state Z as not-running.
+alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null && [ "$(awk '{print $3}' /proc/"$1"/stat 2>/dev/null)" != "Z" ]; }
+if [ -f "$PID" ] && alive "$(cat "$PID" 2>/dev/null)"; then
   echo "already running: $(cat "$PID")"; exit 0
 fi
 cd "$HERE"
