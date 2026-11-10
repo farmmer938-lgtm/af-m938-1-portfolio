@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { paymentMiddleware, x402ResourceServer } from "@x402/express";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
+import { ExactSvmScheme } from "@x402/svm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { bazaarResourceServerExtension, declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { csvToJson, score } from "./databridge.mjs";
@@ -15,6 +16,11 @@ import { csvToJson, score } from "./databridge.mjs";
 const PAY_TO = process.env.AF_PAY_TO || "0xf3C99a6d6e7C6b2ae00b44dC42cC3eb7691D7702";
 const PRICE = process.env.AF_PRICE || "$0.05";
 const NET = "eip155:8453"; // Base mainnet
+// Solana mainnet (CAIP-2). PayAI is Solana-first and sponsors the network fee, so a buyer
+// needs only USDC — no SOL, and AF needs no gas to be paid. AF's Solana payout address comes
+// from its own key (secrets/af_solana.json); the EVM address can't receive SPL tokens.
+const SVM_NET = process.env.AF_SVM_NETWORK || "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+const SVM_PAY_TO = process.env.AF_SVM_PAY_TO || null;
 // Public base URL, used as the canonical resource id that CDP Bazaar indexes. The host
 // embeds the container RUNTIME_ID, so derive it from the live environment when no explicit
 // override is set; a hardcoded host goes stale on restart and buyers then hit a dead URL.
@@ -32,10 +38,20 @@ const facilitator = new HTTPFacilitatorClient({ url: "https://facilitator.payai.
 const resourceServer = new x402ResourceServer(facilitator)
   .register(NET, new ExactEvmScheme())
   .registerExtension(bazaarResourceServerExtension);
+if (SVM_PAY_TO) resourceServer.register(SVM_NET, new ExactSvmScheme());
+
+// Payment options offered per resource: Base (USDC, EIP-3009) and — when AF has a Solana
+// payout address — Solana (USDC, facilitator-sponsored fee). Buyers pick whichever rail
+// their wallet already holds USDC on.
+const acceptsFor = (resource) => {
+  const a = [{ scheme: "exact", price: PRICE, network: NET, payTo: PAY_TO }];
+  if (SVM_PAY_TO) a.push({ scheme: "exact", price: PRICE, network: SVM_NET, payTo: SVM_PAY_TO });
+  return a;
+};
 
 app.use(paymentMiddleware({
   "POST /csv_to_json": {
-    accepts: [{ scheme: "exact", price: PRICE, network: NET, payTo: PAY_TO }],
+    accepts: acceptsFor(),
     resource: `${PUBLIC}/csv_to_json`,
     description: "Convert CSV text to typed JSON (delimiter sniffing, quoted fields, number/bool inference).",
     mimeType: "application/json",
@@ -50,7 +66,7 @@ app.use(paymentMiddleware({
     }),
   },
   "POST /kpi_score": {
-    accepts: [{ scheme: "exact", price: PRICE, network: NET, payTo: PAY_TO }],
+    accepts: acceptsFor(),
     resource: `${PUBLIC}/kpi_score`,
     description: "Score weighted KPIs to 0..100 with higher/lower-is-better normalisation.",
     mimeType: "application/json",
@@ -85,6 +101,7 @@ app.get("/", (_req, res) => res.json({
   name: "AF DataBridge (x402)",
   tools: { "POST /csv_to_json": PRICE, "POST /kpi_score": PRICE },
   network: NET, payTo: PAY_TO,
+  rails: SVM_PAY_TO ? { base: PAY_TO, solana: SVM_PAY_TO } : { base: PAY_TO },
 }));
 
 app.get("/favicon.ico", (_req, res) => {
@@ -163,18 +180,20 @@ app.get("/openapi.json", (_req, res) => res.json({
 }));
 // x402 discovery manifest. Indexers (x402scan, Bazaar crawlers) probe this well-known
 // path to enumerate a host's paid resources without guessing endpoints.
-app.get("/.well-known/x402", (_req, res) => res.json({
-  x402Version: 1,
-  resources: [
-    { resource: `${PUBLIC}/csv_to_json`, method: "POST", price: PRICE, network: NET, payTo: PAY_TO,
-      description: "Convert CSV text to typed JSON." },
-    { resource: `${PUBLIC}/kpi_score`, method: "POST", price: PRICE, network: NET, payTo: PAY_TO,
-      description: "Score weighted KPIs to 0..1." },
-  ],
-  openapi: `${PUBLIC}/openapi.json`,
-  contact: "farmmer938@gmail.com",
-}));
-
+app.get("/.well-known/x402", (_req, res) => {
+  const rails = [{ net: NET, payTo: PAY_TO }];
+  if (SVM_PAY_TO) rails.push({ net: SVM_NET, payTo: SVM_PAY_TO });
+  const resources = [];
+  for (const r of [["csv_to_json", "Convert CSV text to typed JSON."],
+                   ["kpi_score", "Score weighted KPIs to 0..1."]]) {
+    for (const rail of rails) {
+      resources.push({ resource: `${PUBLIC}/${r[0]}`, method: "POST", price: PRICE,
+                       network: rail.net, payTo: rail.payTo, description: r[1] });
+    }
+  }
+  res.json({ x402Version: 1, resources, openapi: `${PUBLIC}/openapi.json`,
+             contact: "farmmer938@gmail.com" });
+});
 // Serve control proofs (OpenTask supplier ownership, and any other well-known files)
 // from disk under WELLKNOWN_DIR. The proof must be published verbatim at the exact
 // challenge URL, so this route mirrors the request path onto the filesystem.
