@@ -12,6 +12,7 @@ import { ExactSvmScheme } from "@x402/svm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { bazaarResourceServerExtension, declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { csvToJson, csvToSql, score } from "./databridge.mjs";
+import { record, reputation, readReceipts, signerAddress } from "./receipts.mjs";
 
 const PAY_TO = process.env.AF_PAY_TO || "0xf3C99a6d6e7C6b2ae00b44dC42cC3eb7691D7702";
 const PRICE = process.env.AF_PRICE || "$0.05";
@@ -123,11 +124,48 @@ app.use(paymentMiddleware({
   },
 }, resourceServer));
 
+// Receipts are signed in the settlement hook: funds have already moved on-chain, so a
+// failure here is logged, never thrown (it must not fail a settled payment).
+const toolFor = (ctx) => {
+  const r = ctx?.requirements?.resource ?? ctx?.paymentPayload?.resource ?? ctx?.resource;
+  // `resource` can be a string or an object like { url }.
+  const url = typeof r === "string" ? r : r?.url || r?.resource;
+  if (url) return String(url).split("/").filter(Boolean).pop() || "unknown";
+  const t = ctx?.transportContext;
+  const p = t?.request?.path || t?.req?.path || t?.path;
+  return p ? String(p).split("/").filter(Boolean).pop() : "unknown";
+};
+resourceServer.onAfterSettle(async (ctx) => {
+  try {
+    await record({
+      tool: toolFor(ctx),
+      result: ctx.result,
+      requirements: ctx.requirements,
+      payer: ctx.result?.payer,
+    });
+  } catch (e) {
+    console.error("[receipts] hook error:", e.message);
+  }
+});
+
+// Free, machine-readable proof of AF's own track record. An agent can check this before
+// paying: it is signed data, so the buyer does not have to take AF's word for it.
+app.get("/receipts.json", (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 1000);
+  res.json({ signer: signerAddress(), count: readReceipts(1000).length, receipts: readReceipts(limit) });
+});
+app.get("/reputation.json", (_req, res) => res.json(reputation()));
+
 app.get("/", (_req, res) => res.json({
   name: "AF DataBridge (x402)",
   tools: { "POST /csv_to_json": PRICE, "POST /kpi_score": PRICE, "POST /csv_to_sql": SQL_PRICE },
   network: NET, payTo: PAY_TO,
   rails: SVM_PAY_TO ? { base: PAY_TO, solana: SVM_PAY_TO } : { base: PAY_TO },
+  proof: {
+    note: "AF signs a receipt for every settled call. Verify offline; do not trust the claim.",
+    receipts: "/receipts.json", reputation: "/reputation.json",
+    verifier: "tools/af_verify_receipts.py in github.com/farmmer938-lgtm/AX_MASTER_BRAIN",
+  },
 }));
 
 app.get("/favicon.ico", (_req, res) => {
