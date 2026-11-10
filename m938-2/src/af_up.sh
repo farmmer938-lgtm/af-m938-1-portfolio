@@ -96,6 +96,14 @@ if [ -f "$PUBLISH" ]; then
   python3 "$PUBLISH" >>/workspace/.endpoint-publish.log 2>&1 && log "endpoint published" || log "endpoint publish skipped"
 fi
 
+# 7c. Re-index the CURRENT origin in the x402scan discovery registry. Registration is
+#     free (SIWX wallet proof, no gas); it must re-run each boot because the host changes,
+#     otherwise buyers are sent to a dead URL.
+XREG=/workspace/project/AX_MASTER_BRAIN/tools/af_x402scan_register.py
+if [ -f "$XREG" ]; then
+  python3 "$XREG" >>/workspace/.x402scan-register.log 2>&1 && log "x402scan registered" || log "x402scan register skipped"
+fi
+
 # 6. Browser autologin: once noVNC/chromium is up, log into sites the owner saved
 #    once in the persistent profile. Chrome's own password manager fills the form
 #    and AF clicks submit, so a restart no longer means "wait for K to log in".
