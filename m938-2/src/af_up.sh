@@ -45,6 +45,32 @@ is_running "mail_watchdog_loop.sh"     || rm -f /workspace/.mail-watchdog.pid
 is_running "doink_watchdog_loop.sh"    || rm -f /workspace/.doink-watchdog.pid
 is_running "lazada_autopilot_loop.sh"  || rm -f /workspace/.lazada-autopilot-loop.pid
 is_running "novnc_watchdog.sh"         || rm -f /workspace/.novnc-watchdog.pid
+is_running "af_demand_loop.py"         || rm -f /workspace/.af-demand-loop.pid
+is_running "af_x_loop.py"              || rm -f /workspace/.af-x-loop.pid
+
+# 2b. Hydrate the durable secret store into this shell. A restarted sandbox has NO
+#     OpenHands session, so every credential would otherwise be missing and the loops
+#     below would die on their first os.environ lookup. af_env caches env->store too.
+if [ -f /workspace/project/AX_MASTER_BRAIN/tools/af_env.py ]; then
+  python3 /workspace/project/AX_MASTER_BRAIN/tools/af_env.py >>/workspace/.af-up.log 2>&1 \
+    && log "secrets hydrated" || log "secret hydration reported missing keys (see af_env.py --check)"
+  if [ -f /workspace/.secrets/af_master.json ]; then
+    while IFS='=' read -r k v; do
+      [ -n "$k" ] && export "$k=$v"
+    done < <(python3 - <<'PY'
+import json, os
+try:
+    d = json.load(open("/workspace/.secrets/af_master.json"))
+    for k, raw in (d.get("secrets") or {}).items():
+        v = raw if isinstance(raw, str) else (raw or {}).get("value")
+        if v:
+            print(f"{k}={v}")
+except Exception:
+    pass
+PY
+)
+  fi
+fi
 
 # 3. noVNC desktop (Xvfb + chromium CDP :9222 + x11vnc + websockify :12001).
 if ! is_running "novnc_watchdog.sh"; then
@@ -117,7 +143,7 @@ fi
 
 # 7. Report.
 up=0
-for s in "node server.mjs" "afcashier_loop.sh" "mail_watchdog_loop.sh" "doink_watchdog_loop.sh" "novnc_watchdog.sh"; do
+for s in "node server.mjs" "afcashier_loop.sh" "mail_watchdog_loop.sh" "doink_watchdog_loop.sh" "novnc_watchdog.sh" "af_supervisor_loop.sh" "af_demand_loop.py" "af_x_loop.py"; do
   is_running "$s" && up=$((up+1)) || log "STILL DOWN: $s"
 done
-log "af-up done: $up/5 services running"
+log "af-up done: $up/8 services running"

@@ -170,20 +170,65 @@ def login_with_password(cfg: dict, wait: int = 25) -> dict:
         url = tab.eval("location.href") or ""
         if cfg["logged_in"] in url:
             return {"ok": True, "via": "password", "url": url}
+        if _blocked_by_challenge(tab):
+            return {"ok": False, "challenge": True, "reason": "captcha after submit", "url": url}
     return {"ok": False, "reason": "did not reach logged-in url", "url": tab.eval("location.href")}
+
+
+def _hard_reload(cfg: dict) -> None:
+    """Force the site back to a clean login page. An intermittent failure usually means the
+    tab was mid-navigation, so a cache-busted reload is what makes a retry worth doing."""
+    try:
+        tab = _open(cfg["url"])
+        tab.call("Page.enable")
+        tab.eval("location.href=%r" % (cfg["url"] + "?af_retry=" + str(int(time.time()))))
+        time.sleep(4)
+    except Exception:
+        pass
+
+
+def _blocked_by_challenge(tab: Tab) -> bool:
+    """True when the site answered the login POST with an anti-bot challenge.
+
+    Lazada redirects to member.lazada.com/.../punish?...captcharecaptcha from a datacenter
+    IP. Retrying a password against a captcha wall cannot succeed and risks locking the
+    account, so the caller must stop rather than loop.
+    """
+    try:
+        url = tab.eval("location.href") or ""
+        if "punish" in url or "captcha" in url.lower():
+            return True
+        # The challenge is served in an iframe from member.lazada.com, so the page URL
+        # stays on the login page and a top-level DOM query finds nothing. Look inside.
+        return bool(tab.eval(
+            "!!document.querySelector('[class*=captcha],[id*=captcha],.nc-container,[class*=slide]')"
+            "||[...document.querySelectorAll('iframe')].some(f=>/punish|captcha/i.test(f.src||''))"))
+    except Exception:
+        return False
 
 
 def autologin(cfg: dict, wait: int = 25) -> dict:
     # Route 1: replay saved cookies. Works after a container restart because the
     # cookies are stored on disk, unlike Chrome's password autofill.
     if cfg.get("_key"):
-        cookie_try = login_with_cookies(cfg, wait=min(wait, 20))
-        if cookie_try.get("ok"):
-            return cookie_try
-        pw_try = login_with_password(cfg, wait=wait)
-        if pw_try.get("ok"):
-            return pw_try
-        return pw_try
+        last = {"ok": False, "reason": "no attempt"}
+        for attempt in range(3):
+            cookie_try = login_with_cookies(cfg, wait=min(wait, 20))
+            if cookie_try.get("ok"):
+                return cookie_try
+            last = cookie_try
+            pw_try = login_with_password(cfg, wait=wait)
+            if pw_try.get("ok"):
+                return pw_try
+            last = pw_try
+            if pw_try.get("challenge"):
+                # Fail closed: a captcha wall is external, and more attempts risk a lockout.
+                return {"ok": False, "challenge": True,
+                        "reason": "anti-bot challenge (captcha) — external gate, not a code bug"}
+            if attempt < 2:
+                # A flaky console login is usually a half-loaded page; reload and retry.
+                _hard_reload(cfg)
+        return last
 
     tab = _open(cfg["url"])
     tab.call("Page.bringToFront")

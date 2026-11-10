@@ -45,14 +45,23 @@ def lazada(t: Tab) -> bool:
 
 
 def main() -> int:
+    # Sites whose login is gated by an EXTERNAL anti-bot challenge (captcha). Reported
+    # separately so it is not mistaken for an AF bug or an expired session we can fix.
+    EXTERNAL: set = set()
     # Try to restore any expired session before reporting: the persistent profile
     # holds the owner's saved logins, so an expired session is usually self-healable
     # and must not be reported as "needs K".
     try:
         import subprocess
         for site in ("lazada", "doink"):
-            subprocess.run(["python3", "/workspace/project/AX_MASTER_BRAIN/tools/af_autologin.py", site],
-                           capture_output=True, timeout=90)
+            r = subprocess.run(["python3", "/workspace/project/AX_MASTER_BRAIN/tools/af_autologin.py", site],
+                               capture_output=True, timeout=180)
+            try:
+                res = json.loads((r.stdout or b"").decode().strip().splitlines()[-1])
+            except Exception:
+                res = {}
+            if res.get("challenge"):
+                EXTERNAL.add(site)
     except Exception:
         pass
     t = Tab.for_url("app.do.ink")
@@ -68,9 +77,11 @@ def main() -> int:
     t.close()
     # K is no longer in the operating loop: never emit a "needs K" action item.
     # A dead session is an AF blocker to self-heal, not a task for a human.
-    st["blocked"] = [k for k in ("doink", "lazada") if st[k] == "expired"]
+    st["blocked"] = [k for k in ("doink", "lazada") if st[k] == "expired" and k not in EXTERNAL]
+    st["external_gate"] = sorted(EXTERNAL)
     json.dump(st, open(OUT, "w"), indent=1)
-    log("doink=%s lazada=%s blocked=%s" % (st["doink"], st["lazada"], st["blocked"]))
+    log("doink=%s lazada=%s blocked=%s external_gate=%s"
+        % (st["doink"], st["lazada"], st["blocked"], st["external_gate"]))
     return 0
 
 
