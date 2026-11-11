@@ -59,6 +59,15 @@ def main() -> int:
     t = Tab.for_url("app.do.ink")
     counts = read_counts(t)
     total = counts.get("ทั้งหมด", 0)
+    # A half-rendered page after a redirect reports no labels at all, which used to log
+    # "orders: {}" and read exactly like a healthy zero. Re-read before believing it.
+    if not counts.get("_session") and total == 0 and not counts.get("_empty"):
+        for _ in range(2):
+            time.sleep(4)
+            counts = read_counts(t)
+            total = counts.get("ทั้งหมด", 0)
+            if total > 0 or counts.get("_empty") or counts.get("_session"):
+                break
     if counts.get("_session"):
         # Self-heal instead of nagging a human: the persistent profile holds the saved
         # login, so re-run autologin and retry once before giving up.
@@ -75,6 +84,10 @@ def main() -> int:
               "The Do.ink watchdog found the sign-in screen and its autologin (cookies then "
               "password) did not restore the session.\n\nAF will keep retrying each cycle. "
               "No human step is required; this is a self-heal blocker.")
+        return 1
+    if total == 0 and not counts.get("_empty"):
+        # Still no order labels and no explicit empty marker: do not claim "zero orders".
+        log("UNVERIFIED: Do.ink orders page did not render counts (no labels, no empty marker)")
         return 1
     log("orders: %s" % json.dumps({k: v for k, v in counts.items() if not k.startswith("_")}, ensure_ascii=False))
     if total > 0:

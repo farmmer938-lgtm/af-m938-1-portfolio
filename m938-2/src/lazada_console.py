@@ -34,11 +34,11 @@ _PROLOGUE = (
 
 def _post(t: Tab, path: str, params: dict) -> dict:
     js = (
-        "(async()=>{%s"
+        "(async()=>{try{%s"
         "const p=new URLSearchParams(%s);p.set('_tb_token_',tb);p.set('xcsrf-token',tok);"
         "const h={'Content-Type':'application/x-www-form-urlencoded','xcsrf-token':tok};"
         "const r=await fetch(%s+'?_tb_token_='+tb,{method:'POST',credentials:'include',headers:h,"
-        "body:p.toString()});return await r.text();})()"
+        "body:p.toString()});return await r.text();}catch(e){return '{\"_fetch_error\":true}';}})()"
         % (_PROLOGUE, json.dumps(params), json.dumps(BASE + path))
     )
     return json.loads(t.js(js, await_promise=True))
@@ -47,12 +47,18 @@ def _post(t: Tab, path: str, params: dict) -> dict:
 def _get(t: Tab, path: str, params: dict | None = None) -> dict:
     q = "&".join("%s=%s" % (k, v) for k, v in (params or {}).items())
     js = (
-        "(async()=>{%s"
+        "(async()=>{try{%s"
         "const r=await fetch(%s+'?_tb_token_='+tb+%s,{credentials:'include'});"
-        "return await r.text();})()"
+        "return await r.text();}catch(e){return '{\"_fetch_error\":true}';}})()"
         % (_PROLOGUE, json.dumps(BASE + path), json.dumps("&" + q if q else ""))
     )
     return json.loads(t.js(js, await_promise=True))
+
+
+def logged_in(t: Tab) -> bool:
+    """False when the console bounced us to the sign-in page (session gone / captcha gate)."""
+    t.goto(CONSOLE_URL, settle=4)
+    return "login" not in (t.js("location.href") or "").lower()
 
 
 def categories(t: Tab) -> list:

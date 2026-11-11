@@ -97,6 +97,14 @@ def main() -> int:
     t = Tab()
     t.goto(lc.CONSOLE_URL, settle=4)
 
+    # Fail closed on a logged-out console. Lazada gates this datacenter IP with an
+    # external reCAPTCHA, so every console API call would otherwise throw
+    # "Failed to fetch" and spam the log once per cycle with a useless traceback.
+    if not lc.logged_in(t):
+        log("console NOT logged in (session expired / external captcha gate) — "
+            "skipping this pass; AF will retry next cycle")
+        return 0
+
     cats = lc.categories(t)
     me = next((c for c in cats if c.get("appCid") == APP_CID), {})
     apps = lc.app_list(t)

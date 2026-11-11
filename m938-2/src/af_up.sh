@@ -47,6 +47,8 @@ is_running "lazada_autopilot_loop.sh"  || rm -f /workspace/.lazada-autopilot-loo
 is_running "novnc_watchdog.sh"         || rm -f /workspace/.novnc-watchdog.pid
 is_running "af_demand_loop.py"         || rm -f /workspace/.af-demand-loop.pid
 is_running "af_x_loop.py"              || rm -f /workspace/.af-x-loop.pid
+is_running "session_health_loop.sh"    || rm -f /workspace/.session-health-loop.pid
+is_running "af_supervisor.py"          || rm -f /workspace/.af-supervisor.pid
 
 # 2b. Hydrate the durable secret store into this shell. A restarted sandbox has NO
 #     OpenHands session, so every credential would otherwise be missing and the loops
@@ -93,6 +95,7 @@ fi
 is_running "mail_watchdog_loop.sh" || { setsid nohup bash "$SRC/mail_watchdog_loop.sh" >/dev/null 2>&1 & log "started mail_watchdog"; }
 is_running "doink_watchdog_loop.sh" || { setsid nohup bash "$SRC/doink_watchdog_loop.sh" >/dev/null 2>&1 & log "started doink_watchdog"; }
 is_running "lazada_autopilot_loop.sh" || { setsid nohup bash "$SRC/lazada_autopilot_loop.sh" >/dev/null 2>&1 & log "started lazada_autopilot"; }
+is_running "session_health_loop.sh"   || { setsid nohup bash "$SRC/session_health_loop.sh" >/dev/null 2>&1 & log "started session_health"; }
 
 # 6b. AF supervisor (watchdog-of-watchdogs): keeps every loop above alive, refreshes
 #     the status file + dashboard, and starts the portfolio autopilot. Must run after
@@ -143,7 +146,7 @@ fi
 
 # 7. Report.
 up=0
-for s in "node server.mjs" "afcashier_loop.sh" "mail_watchdog_loop.sh" "doink_watchdog_loop.sh" "novnc_watchdog.sh" "af_supervisor_loop.sh" "af_demand_loop.py" "af_x_loop.py"; do
+for s in "node server.mjs" "afcashier_loop.sh" "mail_watchdog_loop.sh" "doink_watchdog_loop.sh" "novnc_watchdog.sh" "af_supervisor_loop.sh" "af_demand_loop.py" "af_x_loop.py" "session_health_loop.sh"; do
   is_running "$s" && up=$((up+1)) || log "STILL DOWN: $s"
 done
-log "af-up done: $up/8 services running"
+log "af-up done: $up/9 services running"
