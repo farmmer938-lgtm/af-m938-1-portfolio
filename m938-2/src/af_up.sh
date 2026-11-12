@@ -58,7 +58,11 @@ if [ -f /workspace/project/AX_MASTER_BRAIN/tools/af_env.py ]; then
     && log "secrets hydrated" || log "secret hydration reported missing keys (see af_env.py --check)"
   if [ -f /workspace/.secrets/af_master.json ]; then
     while IFS='=' read -r k v; do
-      [ -n "$k" ] && export "$k=$v"
+      # Never overwrite a secret that is ALREADY in this shell. After a restart there is
+      # no live session, so the store is all we have — but the store's GITHUB_TOKEN can be
+      # stale (401), and exporting it over a freshly injected value silently breaks every
+      # token user (products-guard 401'd exactly this way). Present env always wins.
+      if [ -n "$k" ] && [ -z "${!k:-}" ]; then export "$k=$v"; fi
     done < <(python3 - <<'PY'
 import json, os
 try:
