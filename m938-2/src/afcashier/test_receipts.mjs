@@ -1,10 +1,20 @@
-// Tests for signed settlement receipts. Run: AF_SIGNER_KEY=0x<32bytes> node --test test_receipts.mjs
+// Tests for signed settlement receipts. Run: node --test test_receipts.mjs
+// Set AF_SIGNER_KEY before launching if you want the signer to be a specific key; the
+// tests default to a fixed test key and never write to the production receipt log.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { recoverMessageAddress } from "viem";
-import { canonicalReceipt, record, reputation, readReceipts, signerAddress } from "./receipts.mjs";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const KEY = process.env.AF_SIGNER_KEY || "0x" + "11".repeat(32);
+process.env.AF_SIGNER_KEY = KEY;
+// Isolate the log BEFORE importing the module: it reads the env at import time, and a
+// shared log both pollutes the real one and makes these tests order-dependent.
+process.env.AF_RECEIPT_LOG = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "af-receipts-")), "receipts.jsonl");
+
+const { recoverMessageAddress } = await import("viem");
+const { canonicalReceipt, record, reputation, readReceipts, signerAddress } = await import("./receipts.mjs");
 
 test("canonical JSON is key-order independent", () => {
   const a = canonicalReceipt({ b: 1, a: 2, signature: "0xdead" });
