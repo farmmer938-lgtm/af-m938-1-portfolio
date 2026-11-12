@@ -12,6 +12,7 @@ import { ExactSvmScheme } from "@x402/svm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { bazaarResourceServerExtension, declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { csvToJson, csvToSql, score } from "./databridge.mjs";
+import { checkEndpoint } from "./endpointcheck.mjs";
 import { record, reputation, readReceipts, signerAddress } from "./receipts.mjs";
 
 const PAY_TO = process.env.AF_PAY_TO || "0xf3C99a6d6e7C6b2ae00b44dC42cC3eb7691D7702";
@@ -19,6 +20,8 @@ const PRICE = process.env.AF_PRICE || "$0.05";
 // The SQL emitter does more work per call (type inference + identifier quoting + literal
 // escaping for three dialects), so it is priced above the plain converter.
 const SQL_PRICE = process.env.AF_SQL_PRICE || "$0.08";
+// Endpoint checking makes one live outbound call, so it is priced like the SQL emitter.
+const CHECK_PRICE = process.env.AF_CHECK_PRICE || "$0.08";
 const NET = "eip155:8453"; // Base mainnet
 // Solana mainnet (CAIP-2). PayAI is Solana-first and sponsors the network fee, so a buyer
 // needs only USDC — no SOL, and AF needs no gas to be paid. AF's Solana payout address comes
@@ -122,6 +125,28 @@ app.use(paymentMiddleware({
       output: { example: { ok: true, sql: { dialect: "postgres", ddl: "CREATE TABLE ...", dml: "INSERT INTO ...", columns: [] } } },
     }),
   },
+  "POST /x402_check": {
+    accepts: acceptsFor(CHECK_PRICE),
+    resource: `${PUBLIC}/x402_check`,
+    description: "Check whether an endpoint answers with a well-formed x402 402 challenge before you pay it: parses the Payment-Required header, lists the accepts (scheme, network, asset, payTo, amount), and says if it is ready to pay.",
+    mimeType: "application/json",
+    serviceName: "AF DataBridge",
+    tags: ["x402", "endpoint", "verify", "health", "payment", "discovery"],
+    extensions: declareDiscoveryExtension({
+      method: "POST",
+      bodyType: "json",
+      input: { url: "https://example.com/paid-route", method: "GET" },
+      inputSchema: {
+        properties: {
+          url: { type: "string", description: "https URL of the x402 endpoint to check." },
+          method: { type: "string", enum: ["GET", "POST"], description: "HTTP method to probe with. Defaults to GET." },
+          body: { type: "object", description: "Optional JSON body for a POST probe." },
+        },
+        required: ["url"],
+      },
+      output: { example: { ok: true, url: "https://example.com/paid-route", is_x402: true, ready_to_pay: true, accepts: [] } },
+    }),
+  },
 }, resourceServer));
 
 // Receipts are signed in the settlement hook: funds have already moved on-chain, so a
@@ -158,7 +183,7 @@ app.get("/reputation.json", (_req, res) => res.json(reputation()));
 
 app.get("/", (_req, res) => res.json({
   name: "AF DataBridge (x402)",
-  tools: { "POST /csv_to_json": PRICE, "POST /kpi_score": PRICE, "POST /csv_to_sql": SQL_PRICE },
+  tools: { "POST /csv_to_json": PRICE, "POST /kpi_score": PRICE, "POST /csv_to_sql": SQL_PRICE, "POST /x402_check": CHECK_PRICE },
   network: NET, payTo: PAY_TO,
   rails: SVM_PAY_TO ? { base: PAY_TO, solana: SVM_PAY_TO } : { base: PAY_TO },
   proof: {
@@ -267,6 +292,36 @@ app.get("/openapi.json", (_req, res) => res.json({
         },
       },
     },
+    "/x402_check": {
+      post: {
+        operationId: "x402_check",
+        summary: "Check an endpoint answers with a well-formed x402 402 challenge",
+        tags: ["x402", "Verify"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.08" }, protocols: [{ x402: {} }] },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: {
+            type: "object",
+            properties: {
+              url: { type: "string", description: "https URL of the x402 endpoint to check." },
+              method: { type: "string", enum: ["GET", "POST"], description: "HTTP method to probe with. Defaults to GET." },
+              body: { type: "object", description: "Optional JSON body for a POST probe." },
+            },
+            required: ["url"],
+          } } },
+        },
+        responses: {
+          200: { description: "Verdict with parsed accepts and warnings", content: { "application/json": { schema: {
+            type: "object", properties: {
+              ok: { type: "boolean" }, url: { type: "string" }, is_x402: { type: "boolean" },
+              ready_to_pay: { type: "boolean" }, accepts: { type: "array", items: { type: "object" } },
+              warnings: { type: "array", items: { type: "string" } },
+            }, required: ["ok", "is_x402"],
+          } } } },
+          402: { description: "Payment Required" },
+        },
+      },
+    },
   },
 }));
 // x402 discovery manifest. Indexers (x402scan, Bazaar crawlers) probe this well-known
@@ -277,7 +332,8 @@ app.get("/.well-known/x402", (_req, res) => {
   const resources = [];
   for (const r of [["csv_to_json", "Convert CSV text to typed JSON.", PRICE],
                    ["kpi_score", "Score weighted KPIs to 0..1.", PRICE],
-                   ["csv_to_sql", "Convert CSV text to runnable SQL (postgres/mysql/sqlite).", SQL_PRICE]]) {
+                   ["csv_to_sql", "Convert CSV text to runnable SQL (postgres/mysql/sqlite).", SQL_PRICE],
+                   ["x402_check", "Check an endpoint answers with a well-formed x402 402 challenge.", CHECK_PRICE]]) {
     for (const rail of rails) {
       resources.push({ resource: `${PUBLIC}/${r[0]}`, method: "POST", price: r[2],
                        network: rail.net, payTo: rail.payTo, description: r[1] });
@@ -312,6 +368,14 @@ app.post("/csv_to_sql", (req, res) => {
 app.post("/kpi_score", (req, res) => {
   try { res.json({ ok: true, score: score(req.body?.metrics ?? []) }); }
   catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
+});
+app.post("/x402_check", async (req, res) => {
+  try {
+    const r = await checkEndpoint(String(req.body?.url ?? ""), {
+      method: req.body?.method, body: req.body?.body ?? null,
+    });
+    res.status(r.ok ? 200 : 400).json(r);
+  } catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
 });
 
 const PORT = process.env.PORT || 12000;
