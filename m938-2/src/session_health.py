@@ -60,7 +60,7 @@ def main() -> int:
                 res = json.loads((r.stdout or b"").decode().strip().splitlines()[-1])
             except Exception:
                 res = {}
-            if res.get("challenge"):
+            if res.get("challenge") or res.get("sso_only"):
                 EXTERNAL.add(site)
     except Exception:
         pass
