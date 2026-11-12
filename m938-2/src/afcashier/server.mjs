@@ -37,6 +37,10 @@ const PUBLIC = process.env.AF_PUBLIC_URL
 // Directory whose contents are served verbatim at /.well-known/* (control proofs etc).
 const WELLKNOWN_DIR = process.env.AF_WELLKNOWN_DIR
   || path.join(path.dirname(fileURLToPath(import.meta.url)), "well-known");
+// Public work samples (evidence pages) served at /work/*. Bids cite these URLs, so a
+// buyer must be able to fetch them; a 404 here silently voids AF's proof-of-work claim.
+const WORK_DIR = process.env.AF_WORK_DIR
+  || path.join(path.dirname(fileURLToPath(import.meta.url)), "work");
 
 const app = express();
 app.use(express.json());
@@ -352,6 +356,15 @@ app.get(/^\/\.well-known\/.+/, (req, res) => {
     return res.status(404).json({ error: "not found" });
   }
   res.type("application/json").send(fs.readFileSync(file));
+});
+
+app.get(/^\/work\/.+/, (req, res) => {
+  const rel = req.path.replace(/^\/work\//, "");
+  const file = path.join(WORK_DIR, path.normalize(rel));
+  if (!file.startsWith(WORK_DIR) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    return res.status(404).json({ error: "not found" });
+  }
+  res.type(path.extname(file) || "text/plain").send(fs.readFileSync(file));
 });
 
 app.post("/csv_to_json", (req, res) => {
