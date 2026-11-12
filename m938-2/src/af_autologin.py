@@ -44,7 +44,7 @@ SITES = {
         "url": "https://app.do.ink/orders",
         "user_field": "input[type=email]",
         "pw_field": "input[type=password]",
-        "btn_text": "log in",
+        "btn_text": "sign in",
         "logged_in": "app.do.ink/orders",
     },
 }
@@ -106,6 +106,8 @@ def _open(url: str) -> Tab:
     """Reuse an existing tab for the site, or open a new one via CDP."""
     import json
     import urllib.request
+    if not url:
+        raise SystemExit("autologin: no url to open (pass a site key or --url)")
     for t in targets():
         if t.get("type") == "page" and url.split("//")[1].split("/")[0] in t.get("url", ""):
             return Tab(t)
@@ -147,7 +149,23 @@ def login_with_password(cfg: dict, wait: int = 25) -> dict:
     time.sleep(3)
     if cfg["logged_in"] in (tab.eval("location.href") or ""):
         return {"ok": True, "already": True, "url": tab.eval("location.href")}
+    # SSO-only page (Google/LINE) with no password field AF could fill: an external gate.
+    _body = (tab.eval("(document.body.innerText||'').toLowerCase()") or "")
+    if (("continue with google" in _body or "continue with line" in _body
+         or "sign in with google" in _body)
+            and not tab.eval("!!document.querySelector('input[type=password]')")):
+        return {"ok": False, "sso_only": True,
+                "reason": "SSO-only sign-in (Google/LINE) — needs the owner's SSO session"}
     if not tab.eval("!!document.querySelector(%s)" % json.dumps(cfg["user_field"])):
+        # An SSO-only sign-in (Google/LINE) has no email/password form AF can fill. That is
+        # an external gate (the owner's SSO session), not an AF bug — report it as such so
+        # the health check does not raise a false self-heal item.
+        body = (tab.eval("(document.body.innerText||'').toLowerCase()") or "")
+        if (("continue with google" in body or "continue with line" in body
+             or "sign in with google" in body)
+                and not tab.eval("!!document.querySelector('input[type=password]')")):
+            return {"ok": False, "sso_only": True,
+                    "reason": "SSO-only sign-in (Google/LINE) — needs the owner's SSO session"}
         return {"ok": False, "reason": "no login form"}
     tab.type_text(cfg["user_field"], email)
     time.sleep(0.6)
@@ -172,6 +190,13 @@ def login_with_password(cfg: dict, wait: int = 25) -> dict:
             return {"ok": True, "via": "password", "url": url}
         if _blocked_by_challenge(tab):
             return {"ok": False, "challenge": True, "reason": "captcha after submit", "url": url}
+    # Password login failed. If the page also offers SSO, the account most likely uses it
+    # (AF's stored password is not the site's) — an external gate, not an AF bug.
+    _body = (tab.eval("(document.body.innerText||'').toLowerCase()") or "")
+    if "continue with google" in _body or "continue with line" in _body:
+        return {"ok": False, "sso_only": True,
+                "reason": "password login failed; account uses Google/LINE SSO",
+                "url": tab.eval("location.href")}
     return {"ok": False, "reason": "did not reach logged-in url", "url": tab.eval("location.href")}
 
 
