@@ -60,6 +60,50 @@ const acceptsFor = (price = PRICE) => {
   return a;
 };
 
+// FOOT-IN-THE-DOOR free trial (closing technique; 6/6 vendor quorum 2026-11-13). Developers
+// don't read pitches, they run code. A free, CAPPED call removes all payment risk so the
+// first integration happens with zero friction, with the paid endpoint one step away. The
+// cap (rows/chars) keeps it a taste, not a free tier. Registered BEFORE paymentMiddleware so
+// it never hits the paywall. Every hit is logged so AF can measure real demand.
+const TRIAL_MAX_ROWS = Number(process.env.AF_TRIAL_MAX_ROWS || 50);
+const TRIAL_MAX_CHARS = Number(process.env.AF_TRIAL_MAX_CHARS || 8000);
+
+function trialLog(tool, ok, note) {
+  try {
+    fs.appendFileSync("/workspace/.af-trial.log",
+      `${new Date().toISOString()} ${tool} ok=${ok} ${note || ""}\n`);
+  } catch { /* logging must never break the response */ }
+}
+function csvTrialGate(body) {
+  const csv = String(body?.csv ?? "");
+  if (!csv) return "csv is required";
+  if (csv.length > TRIAL_MAX_CHARS) return `trial caps input at ${TRIAL_MAX_CHARS} chars; the paid endpoint has no limit`;
+  const rows = csv.split(/\r?\n/).filter((l) => l.trim()).length;
+  if (rows > TRIAL_MAX_ROWS) return `trial caps at ${TRIAL_MAX_ROWS} rows; the paid endpoint has no limit`;
+  return null;
+}
+const upgrade = (name, price) => ({
+  endpoint: `${PUBLIC}/${name}`, price, network: NET,
+  note: "same output, no input cap, payable per call over x402 (no account, no API key)",
+});
+
+app.post("/trial/csv_to_json", (req, res) => {
+  const err = csvTrialGate(req.body);
+  if (err) { trialLog("csv_to_json", false, err); return res.status(400).json({ ok: false, error: err, upgrade: upgrade("csv_to_json", PRICE) }); }
+  try {
+    const rows = csvToJson(String(req.body?.csv ?? ""));
+    trialLog("csv_to_json", true, `rows=${rows.length}`);
+    res.json({ ok: true, trial: true, rows, upgrade: upgrade("csv_to_json", PRICE) });
+  } catch (e) { trialLog("csv_to_json", false, String(e.message || e)); res.status(400).json({ ok: false, error: String(e.message || e) }); }
+});
+app.post("/trial/kpi_score", (req, res) => {
+  try {
+    const s = score(req.body?.metrics ?? []);
+    trialLog("kpi_score", true);
+    res.json({ ok: true, trial: true, score: s, upgrade: upgrade("kpi_score", PRICE) });
+  } catch (e) { trialLog("kpi_score", false, String(e.message || e)); res.status(400).json({ ok: false, error: String(e.message || e) }); }
+});
+
 app.use(paymentMiddleware({
   "POST /csv_to_json": {
     accepts: acceptsFor(),
@@ -188,6 +232,11 @@ app.get("/reputation.json", (_req, res) => res.json(reputation()));
 app.get("/", (_req, res) => res.json({
   name: "AF DataBridge (x402)",
   tools: { "POST /csv_to_json": PRICE, "POST /kpi_score": PRICE, "POST /csv_to_sql": SQL_PRICE, "POST /x402_check": CHECK_PRICE },
+  try_free: {
+    note: "First call is FREE and needs no payment — try before you pay.",
+    "POST /trial/csv_to_json": `free (<= ${TRIAL_MAX_ROWS} rows)`,
+    "POST /trial/kpi_score": "free",
+  },
   network: NET, payTo: PAY_TO,
   rails: SVM_PAY_TO ? { base: PAY_TO, solana: SVM_PAY_TO } : { base: PAY_TO },
   proof: {
