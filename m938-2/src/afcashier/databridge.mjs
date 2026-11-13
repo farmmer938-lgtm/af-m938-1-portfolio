@@ -22,7 +22,7 @@ export function sniffDelimiter(text) {
   return best;
 }
 
-function splitRow(line, delim) {
+export function splitRow(line, delim) {
   const out = []; let cur = ''; let inQ = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
