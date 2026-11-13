@@ -45,6 +45,7 @@ is_running "mail_watchdog_loop.sh"     || rm -f /workspace/.mail-watchdog.pid
 is_running "doink_watchdog_loop.sh"    || rm -f /workspace/.doink-watchdog.pid
 is_running "lazada_autopilot_loop.sh"  || rm -f /workspace/.lazada-autopilot-loop.pid
 is_running "novnc_watchdog.sh"         || rm -f /workspace/.novnc-watchdog.pid
+is_running "af_liveview_watchdog.sh"   || true
 is_running "af_demand_loop.py"         || rm -f /workspace/.af-demand-loop.pid
 is_running "af_x_loop.py"              || rm -f /workspace/.af-x-loop.pid
 is_running "session_health_loop.sh"    || rm -f /workspace/.session-health-loop.pid
@@ -78,11 +79,21 @@ PY
   fi
 fi
 
-# 3. noVNC desktop (Xvfb + chromium CDP :9222 + x11vnc + websockify :12001).
-if ! is_running "novnc_watchdog.sh"; then
-  bash "$SRC/restore_novnc.sh" >>/workspace/.novnc.log 2>&1
-  setsid nohup bash "$SRC/novnc_watchdog.sh" >/dev/null 2>&1 &
-  log "started novnc_watchdog"
+# 3. Browser desktop. Default = CDP Live View: Xvfb + Chromium (:9222) only, and the
+#    human view is served by af_liveview.py over CDP on :12001 (no X streaming, no VNC).
+#    Set AF_USE_NOVNC=1 to fall back to the old x11vnc + websockify + noVNC stack.
+if [ "${AF_USE_NOVNC:-0}" = "1" ]; then
+  if ! is_running "novnc_watchdog.sh"; then
+    bash "$SRC/restore_novnc.sh" >>/workspace/.novnc.log 2>&1
+    setsid nohup bash "$SRC/novnc_watchdog.sh" >/dev/null 2>&1 &
+    log "started novnc_watchdog"
+  fi
+else
+  bash "$SRC/start_desktop.sh" >>/workspace/.novnc.log 2>&1
+  if ! is_running "af_liveview_watchdog.sh"; then
+    setsid nohup bash "$SRC/af_liveview_watchdog.sh" >/dev/null 2>&1 &
+    log "started af_liveview_watchdog (CDP live view on :12001)"
+  fi
 fi
 
 # 4. x402 cashier (the money intake). run.sh is idempotent; the loop supervises it.
@@ -150,7 +161,7 @@ fi
 
 # 7. Report.
 up=0
-for s in "node server.mjs" "afcashier_loop.sh" "mail_watchdog_loop.sh" "doink_watchdog_loop.sh" "novnc_watchdog.sh" "af_supervisor_loop.sh" "af_demand_loop.py" "af_x_loop.py" "session_health_loop.sh"; do
+for s in "node server.mjs" "afcashier_loop.sh" "mail_watchdog_loop.sh" "doink_watchdog_loop.sh" "af_liveview_watchdog.sh" "af_supervisor_loop.sh" "af_demand_loop.py" "af_x_loop.py" "session_health_loop.sh"; do
   is_running "$s" && up=$((up+1)) || log "STILL DOWN: $s"
 done
 log "af-up done: $up/9 services running"
