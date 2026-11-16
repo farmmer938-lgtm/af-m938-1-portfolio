@@ -15,6 +15,7 @@ import { csvToJson, csvToSql, score } from "./databridge.mjs";
 import { auditCsv, auditJson } from "./audit.mjs";
 import { checkEndpoint } from "./endpointcheck.mjs";
 import { record, reputation, readReceipts, signerAddress } from "./receipts.mjs";
+import { isLocal, summarizeDemand } from "./demand.mjs";
 
 const PAY_TO = process.env.AF_PAY_TO || "0xf3C99a6d6e7C6b2ae00b44dC42cC3eb7691D7702";
 const PRICE = process.env.AF_PRICE || "$0.05";
@@ -48,6 +49,27 @@ const WORK_DIR = process.env.AF_WORK_DIR
 
 const app = express();
 app.use(express.json());
+
+// DEMAND MEASUREMENT (vendor quorum 2026-11-16, 5/5): AF could not tell whether any external
+// buyer ever hit the paywall — the only traffic on record was AF's own tests. Every request
+// to a paid or trial endpoint is logged with the client IP + user-agent so "is there real
+// demand?" is a number, not a guess. Loopback/health hits are flagged so they never inflate it.
+const DEMAND_LOG = process.env.AF_DEMAND_LOG || "/workspace/.af-demand.log";
+function clientIp(req) {
+  const xff = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return xff || req.socket?.remoteAddress || "";
+}
+function demandLog(req) {
+  try {
+    const ip = clientIp(req);
+    fs.appendFileSync(DEMAND_LOG, JSON.stringify({
+      ts: new Date().toISOString(), method: req.method, path: req.path,
+      ip, local: isLocal(ip), ua: String(req.headers["user-agent"] || "").slice(0, 160),
+    }) + "\n");
+  } catch { /* logging must never break the response */ }
+}
+const DEMAND_PATHS = /^\/(csv_to_json|kpi_score|csv_to_sql|audit|x402_check|trial\/.*)$/;
+app.use((req, _res, next) => { if (DEMAND_PATHS.test(req.path)) demandLog(req); next(); });
 
 const facilitator = new HTTPFacilitatorClient({ url: "https://facilitator.payai.network" });
 const resourceServer = new x402ResourceServer(facilitator)
@@ -271,6 +293,19 @@ app.get("/receipts.json", (req, res) => {
   res.json({ signer: signerAddress(), count: readReceipts(1000).length, receipts: readReceipts(limit) });
 });
 app.get("/reputation.json", (_req, res) => res.json(reputation()));
+
+// Demand truth: how many EXTERNAL (non-loopback) hits each paid/trial endpoint has had.
+// A number > 0 with a real 402 → there is demand; 0 after distribution → the problem is
+// demand, not visibility. This is the falsification test, served as data.
+app.get("/demand.json", (_req, res) => {
+  let rows = [];
+  try { rows = fs.readFileSync(DEMAND_LOG, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); }
+  catch { rows = []; }
+  res.json({
+    note: "External = not loopback. AF's own tests are excluded so this reflects real buyers.",
+    ...summarizeDemand(rows),
+  });
+});
 
 app.get("/", (_req, res) => res.json({
   name: "AF DataBridge (x402)",
