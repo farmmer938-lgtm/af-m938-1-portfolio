@@ -15,7 +15,7 @@ import { csvToJson, csvToSql, score } from "./databridge.mjs";
 import { auditCsv, auditJson } from "./audit.mjs";
 import { checkEndpoint } from "./endpointcheck.mjs";
 import { record, reputation, readReceipts, signerAddress } from "./receipts.mjs";
-import { isLocal, summarizeDemand } from "./demand.mjs";
+import { classifyIp, summarizeDemand } from "./demand.mjs";
 
 const PAY_TO = process.env.AF_PAY_TO || "0xf3C99a6d6e7C6b2ae00b44dC42cC3eb7691D7702";
 const PRICE = process.env.AF_PRICE || "$0.05";
@@ -55,16 +55,19 @@ app.use(express.json());
 // to a paid or trial endpoint is logged with the client IP + user-agent so "is there real
 // demand?" is a number, not a guess. Loopback/health hits are flagged so they never inflate it.
 const DEMAND_LOG = process.env.AF_DEMAND_LOG || "/workspace/.af-demand.log";
-function clientIp(req) {
-  const xff = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-  return xff || req.socket?.remoteAddress || "";
-}
 function demandLog(req) {
   try {
-    const ip = clientIp(req);
+    // Classify from the SOCKET address only. X-Forwarded-For is client-supplied and spoofable,
+    // so trusting it would let anyone fake a public IP and fake "demand".
+    const ip = req.socket?.remoteAddress || "";
+    // The platform ingress proxies EVERY external request as a private 10.x address, so a socket
+    // address alone cannot tell a real buyer from internal traffic. The unambiguous external
+    // signal is a PAYMENT ATTEMPT: x402 v2 clients send PAYMENT-SIGNATURE when they try to pay.
+    const payAttempt = Boolean(req.headers["payment-signature"] || req.headers["x-payment"]);
     fs.appendFileSync(DEMAND_LOG, JSON.stringify({
       ts: new Date().toISOString(), method: req.method, path: req.path,
-      ip, local: isLocal(ip), ua: String(req.headers["user-agent"] || "").slice(0, 160),
+      ip, cls: classifyIp(ip), pay: payAttempt,
+      ua: String(req.headers["user-agent"] || "").slice(0, 160),
     }) + "\n");
   } catch { /* logging must never break the response */ }
 }
@@ -301,9 +304,19 @@ app.get("/demand.json", (_req, res) => {
   let rows = [];
   try { rows = fs.readFileSync(DEMAND_LOG, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); }
   catch { rows = []; }
+  // Legacy rows (before the socket-address fix) only carried a boolean `local`; classify them
+  // honestly rather than letting them masquerade as demand.
+  rows = rows.map((r) => r.cls ? r : { ...r, cls: r.local ? "loopback" : classifyIp(r.ip) });
+  const summary = summarizeDemand(rows);
+  const payAttempts = rows.filter((r) => r.pay).length;
   res.json({
-    note: "External = not loopback. AF's own tests are excluded so this reflects real buyers.",
-    ...summarizeDemand(rows),
+    note: "The platform ingress proxies every external request as a private 10.x address, so a "
+      + "socket address cannot separate a real buyer from internal traffic. The one unambiguous "
+      + "external signal is a PAYMENT ATTEMPT (x402 PAYMENT-SIGNATURE header). Treat "
+      + "external_hits as a weak hint and payment_attempts as the real test of demand.",
+    ...summary,
+    payment_attempts: payAttempts,
+    demand_verdict: payAttempts > 0 ? "PAYMENT ATTEMPTED (real demand)" : "NO PAYMENT ATTEMPT (demand unproven)",
   });
 });
 
