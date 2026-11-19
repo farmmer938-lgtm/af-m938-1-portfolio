@@ -44,6 +44,11 @@ const WELLKNOWN_DIR = process.env.AF_WELLKNOWN_DIR
   || path.join(path.dirname(fileURLToPath(import.meta.url)), "well-known");
 // Public work samples (evidence pages) served at /work/*. Bids cite these URLs, so a
 // buyer must be able to fetch them; a 404 here silently voids AF's proof-of-work claim.
+const ART_DIR = process.env.AF_ART_DIR || "/workspace/project/AX_MASTER_BRAIN/artifacts/art_studio";
+const ART_PRICE = process.env.AF_ART_PRICE || "$0.50";
+const APK_PRICE = process.env.AF_APK_PRICE || "$0.90";
+const THEME_PRICE = process.env.AF_THEME_PRICE || "$0.50";
+const STICKER_PRICE = process.env.AF_STICKER_PRICE || "$0.25";
 const WORK_DIR = process.env.AF_WORK_DIR
   || path.join(path.dirname(fileURLToPath(import.meta.url)), "work");
 
@@ -116,6 +121,105 @@ const upgrade = (name, price) => ({
   note: "same output, no input cap, payable per call over x402 (no account, no API key)",
 });
 
+// ART STUDIO — free shop window, paid full-resolution delivery.
+// The thumbnails and gallery are free on purpose: a buyer must be able to see the work
+// before paying. Only the 4096px master file sits behind the x402 paywall.
+const ART_THUMB = /^\/art\/([a-z]+)\/([a-z0-9-]+)\/thumb\.png$/;
+const ART_FULL = /^\/art\/([a-z]+)\/([a-z0-9-]+)\/art\.png$/;
+const artFile = (coll, slug, name) => {
+  const f = path.join(ART_DIR, coll, slug, name);
+  if (!f.startsWith(ART_DIR) || !fs.existsSync(f) || !fs.statSync(f).isFile()) return null;
+  return f;
+};
+app.get("/art", (_req, res) => {
+  const f = path.join(ART_DIR, "gallery", "index.html");
+  if (!fs.existsSync(f)) return res.status(404).send("gallery not built");
+  res.type("text/html").send(fs.readFileSync(f));
+});
+app.get("/art/catalog.json", (_req, res) => {
+  const f = path.join(ART_DIR, "gallery", "index.json");
+  if (!fs.existsSync(f)) return res.status(404).json({ error: "catalog not built" });
+  res.type("application/json").send(fs.readFileSync(f));
+});
+const ART_FREE = /^\/art\/(themes|stickers)\/([a-z0-9-]+)\/(preview\.png|[a-z0-9-]+-thumb\.png)$/;
+// K's own copy. A token in the path keeps it out of crawlers without an account system;
+// the file set is the same one the paid routes serve, so nothing is duplicated.
+const K_TOKEN = process.env.AF_K_TOKEN || "k-7f3a91c4";
+app.get("/k/:token/art/themes/:slug/:name", (req, res) => {
+  if (req.params.token !== K_TOKEN) return res.status(404).json({ error: "not found" });
+  const f = artFile("themes", req.params.slug, req.params.name);
+  if (!f) return res.status(404).json({ error: "not found" });
+  res.type(req.params.name.endsWith(".json") ? "application/json" : "image/png")
+     .setHeader("X-Art-License", "AF Commercial License v1");
+  res.send(fs.readFileSync(f));
+});
+app.get("/k/:token/art/stickers/:src/:name", (req, res) => {
+  if (req.params.token !== K_TOKEN) return res.status(404).json({ error: "not found" });
+  const f = artFile("stickers", req.params.src, req.params.name);
+  if (!f) return res.status(404).json({ error: "not found" });
+  res.type("image/png").send(fs.readFileSync(f));
+});
+app.get("/k/:token/app", (req, res) => {
+  if (req.params.token !== K_TOKEN) return res.status(404).json({ error: "not found" });
+  const f = path.join(ART_DIR, "gallery", "app.html");
+  if (!fs.existsSync(f)) return res.status(404).send("not built");
+  res.type("text/html").send(fs.readFileSync(f));
+});
+app.get("/k/:token", (req, res) => {
+  if (req.params.token !== K_TOKEN) return res.status(404).json({ error: "not found" });
+  const f = path.join(ART_DIR, "gallery", "k.html");
+  if (!fs.existsSync(f)) return res.status(404).send("not built");
+  res.type("text/html").send(fs.readFileSync(f));
+});
+// No-install path: a JPEG saves straight into the phone's Photos with zero OS warnings.
+// This exists because sideloading an APK triggers scary Play Protect dialogs, and K's
+// directive is no upfront spend, so Play Store distribution ($25) is off the table.
+app.get("/k/:token/wall", (req, res) => {
+  if (req.params.token !== K_TOKEN) return res.status(404).json({ error: "not found" });
+  const f = path.join(ART_DIR, "gallery", "wall.html");
+  if (!fs.existsSync(f)) return res.status(404).send("not built");
+  res.type("text/html").send(fs.readFileSync(f));
+});
+app.get("/k/:token/img/:name", (req, res) => {
+  if (req.params.token !== K_TOKEN) return res.status(404).json({ error: "not found" });
+  const name = String(req.params.name).replace(/[^a-z0-9.-]/gi, "");
+  if (!name.endsWith(".jpg")) return res.status(404).json({ error: "not found" });
+  const f = path.join(ART_DIR, "mobile_jpg", name);
+  if (!fs.existsSync(f)) return res.status(404).json({ error: "not built" });
+  res.setHeader("Content-Type", "image/jpeg");
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  res.send(fs.readFileSync(f));
+});
+
+// APK delivery. Content-Disposition: attachment is the whole point — without it Android
+// Chrome opens a viewer instead of saving the file, and the buyer has to hunt in Downloads.
+app.get("/k/:token/app/:name", (req, res) => {
+  if (req.params.token !== K_TOKEN) return res.status(404).json({ error: "not found" });
+  const name = String(req.params.name).replace(/[^a-z0-9.-]/gi, "");
+  if (!name.endsWith(".apk")) return res.status(404).json({ error: "not found" });
+  const f = path.join(ART_DIR, "apk", name);
+  if (!fs.existsSync(f)) return res.status(404).json({ error: "not built" });
+  res.setHeader("Content-Type", "application/vnd.android.package-archive");
+  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.setHeader("Content-Length", String(fs.statSync(f).size));
+  fs.createReadStream(f).pipe(res);
+});
+app.get("/art/themes", (_req, res) => {
+  const f = path.join(ART_DIR, "gallery", "themes.html");
+  if (!fs.existsSync(f)) return res.status(404).send("storefront not built");
+  res.type("text/html").send(fs.readFileSync(f));
+});
+app.get(ART_FREE, (req, res) => {
+  const f = artFile(req.params[0], req.params[1], req.params[2]);
+  if (!f) return res.status(404).json({ error: "not found" });
+  res.type("image/png").send(fs.readFileSync(f));
+});
+app.get(ART_THUMB, (req, res) => {
+  const f = artFile(req.params[0], req.params[1], "thumb.png");
+  if (!f) return res.status(404).json({ error: "not found" });
+  res.type("image/png").send(fs.readFileSync(f));
+});
+
 app.post("/trial/csv_to_json", (req, res) => {
   const err = csvTrialGate(req.body);
   if (err) { trialLog("csv_to_json", false, err); return res.status(400).json({ ok: false, error: err, upgrade: upgrade("csv_to_json", PRICE) }); }
@@ -152,6 +256,54 @@ app.post("/trial/audit", (req, res) => {
 });
 
 app.use(paymentMiddleware({
+  "GET /art/:collection/:slug/art.png": {
+    accepts: acceptsFor(ART_PRICE),
+    resource: `${PUBLIC}/art/:collection/:slug/art.png`,
+    description: "Full-resolution 4096x4096 PNG master of an original algorithmic artwork, with commercial licence.",
+    mimeType: "image/png",
+    serviceName: "AF Art Studio",
+    tags: ["art", "image", "generative", "print", "license"],
+    extensions: declareDiscoveryExtension({
+      method: "GET",
+      output: { example: { note: "binary PNG image, 4096x4096" } },
+    }),
+  },
+  "GET /art/themes/*": {
+    accepts: acceptsFor(THEME_PRICE),
+    resource: `${PUBLIC}/art/themes/*`,
+    description: "Phone theme bundle: 2160x4680 wallpaper, lockscreen, adaptive icon layers, accent palette. Commercial licence.",
+    mimeType: "image/png",
+    serviceName: "AF Art Studio",
+    tags: ["theme", "wallpaper", "android", "phone", "art"],
+    extensions: declareDiscoveryExtension({ method: "GET", output: { example: { note: "PNG or theme.json" } } }),
+  },
+  "GET /art/wallpapers/*": {
+    accepts: acceptsFor(APK_PRICE),
+    resource: `${PUBLIC}/art/wallpapers/*`,
+    description: "All 12 phone themes at full 2160x4680 master resolution, one ZIP, no app install needed. Commercial licence.",
+    mimeType: "application/zip",
+    serviceName: "AF Art Studio",
+    tags: ["wallpaper", "theme", "android", "zip", "art"],
+    extensions: declareDiscoveryExtension({ method: "GET", output: { example: { note: "ZIP of PNG masters" } } }),
+  },
+  "GET /art/app/*": {
+    accepts: acceptsFor(APK_PRICE),
+    resource: `${PUBLIC}/art/app/*`,
+    description: "AF Art Studio Android app: 12 phone themes bundled offline, one-tap wallpaper set. Commercial licence.",
+    mimeType: "application/vnd.android.package-archive",
+    serviceName: "AF Art Studio",
+    tags: ["android", "app", "apk", "theme", "wallpaper"],
+    extensions: declareDiscoveryExtension({ method: "GET", output: { example: { note: "signed APK" } } }),
+  },
+  "GET /art/stickers/*": {
+    accepts: acceptsFor(STICKER_PRICE),
+    resource: `${PUBLIC}/art/stickers/*`,
+    description: "Transparent PNG sticker (512px, real alpha) cut from an original artwork. Commercial licence.",
+    mimeType: "image/png",
+    serviceName: "AF Art Studio",
+    tags: ["sticker", "png", "transparent", "art", "chat"],
+    extensions: declareDiscoveryExtension({ method: "GET", output: { example: { note: "512px RGBA PNG" } } }),
+  },
   "POST /csv_to_json": {
     accepts: acceptsFor(),
     resource: `${PUBLIC}/csv_to_json`,
@@ -357,6 +509,83 @@ app.get("/openapi.json", (_req, res) => res.json({
     contact: { email: "farmmer938@gmail.com" },
   },
   paths: {
+    "/art/themes/{slug}/{file}": {
+      get: {
+        operationId: "art_theme_file",
+        summary: "Phone theme file: 2160x4680 wallpaper, lockscreen, adaptive icon layer, or theme.json",
+        tags: ["Art"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.50" }, protocols: [{ x402: {} }] },
+        parameters: [
+          { name: "slug", in: "path", required: true, schema: { type: "string", example: "orbits-obsidian-01" } },
+          { name: "file", in: "path", required: true, schema: { type: "string", example: "wallpaper.png",
+            enum: ["wallpaper.png", "wallpaper-1080x2340.png", "lockscreen.png", "icon-background.png", "icon-foreground.png", "theme.json"] } },
+        ],
+        responses: { "200": { description: "The requested PNG or theme.json (commercial licence)",
+          content: { "image/png": { schema: { type: "string", format: "binary" } },
+                     "application/json": { schema: { type: "object" } } } },
+          "402": { description: "Payment Required" } },
+      },
+    },
+    "/art/wallpapers/{name}": {
+      get: {
+        operationId: "art_wallpapers_zip",
+        summary: "All 12 phone themes at full 2160x4680 master resolution in one ZIP (no app needed)",
+        tags: ["Art"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.90" }, protocols: [{ x402: {} }] },
+        parameters: [
+          { name: "name", in: "path", required: true, schema: { type: "string",
+            enum: ["af-art-studio-everything.zip"] } },
+        ],
+        responses: { "200": { description: "ZIP archive of PNG masters",
+          content: { "application/zip": { schema: { type: "string", format: "binary" } } } },
+          "402": { description: "Payment Required" } },
+      },
+    },
+    "/art/app/{name}": {
+      get: {
+        operationId: "art_app_android",
+        summary: "AF Art Studio Android app: 12 phone themes bundled offline, one-tap wallpaper set",
+        tags: ["Art"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.90" }, protocols: [{ x402: {} }] },
+        parameters: [
+          { name: "name", in: "path", required: true, schema: { type: "string",
+            enum: ["af-art-studio-full.apk", "af-art-studio-free.apk"] } },
+        ],
+        responses: { "200": { description: "Signed Android APK",
+          content: { "application/vnd.android.package-archive": { schema: { type: "string", format: "binary" } } } },
+          "402": { description: "Payment Required" } },
+      },
+    },
+    "/art/stickers/{slug}/{file}": {
+      get: {
+        operationId: "art_sticker",
+        summary: "Transparent 512px PNG sticker (real alpha channel) cut from an original artwork",
+        tags: ["Art"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.25" }, protocols: [{ x402: {} }] },
+        parameters: [
+          { name: "slug", in: "path", required: true, schema: { type: "string", example: "orbits-obsidian-01" } },
+          { name: "file", in: "path", required: true, schema: { type: "string", example: "orbits-obsidian-01-circle.png" } },
+        ],
+        responses: { "200": { description: "RGBA PNG sticker",
+          content: { "image/png": { schema: { type: "string", format: "binary" } } } },
+          "402": { description: "Payment Required" } },
+      },
+    },
+    "/art/{collection}/{slug}/art.png": {
+      get: {
+        operationId: "art_master",
+        summary: "Full-resolution 4096x4096 PNG master of an original algorithmic artwork",
+        tags: ["Art"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.50" }, protocols: [{ x402: {} }] },
+        parameters: [
+          { name: "collection", in: "path", required: true, schema: { type: "string", example: "orbits" } },
+          { name: "slug", in: "path", required: true, schema: { type: "string", example: "orbits-obsidian-01" } },
+        ],
+        responses: { "200": { description: "4096x4096 PNG master (commercial licence)",
+          content: { "image/png": { schema: { type: "string", format: "binary" } } } },
+          "402": { description: "Payment Required" } },
+      },
+    },
     "/csv_to_json": {
       post: {
         operationId: "csv_to_json",
@@ -519,6 +748,23 @@ app.get("/.well-known/x402", (_req, res) => {
                        network: rail.net, payTo: rail.payTo, description: r[1] });
     }
   }
+  for (const rail of rails) {
+    for (const a of [
+      [`${PUBLIC}/art/{collection}/{slug}/art.png`, ART_PRICE,
+       "Full-resolution 4096x4096 PNG master of an original algorithmic artwork (commercial licence)."],
+      [`${PUBLIC}/art/themes/{slug}/{file}`, THEME_PRICE,
+       "Phone theme bundle: 2160x4680 wallpaper, lockscreen, adaptive icon layers, accent palette."],
+      [`${PUBLIC}/art/wallpapers/{name}`, APK_PRICE,
+       "All 12 phone themes, full 2160x4680 masters, one ZIP. No app needed."],
+      [`${PUBLIC}/art/app/{name}`, APK_PRICE,
+       "AF Art Studio Android app (APK): 12 phone themes offline, one-tap wallpaper set."],
+      [`${PUBLIC}/art/stickers/{slug}/{file}`, STICKER_PRICE,
+       "Transparent 512px PNG sticker (real alpha channel) cut from an original artwork."],
+    ]) {
+      resources.push({ resource: a[0], method: "GET", price: a[1],
+                       network: rail.net, payTo: rail.payTo, description: a[2] });
+    }
+  }
   res.json({ x402Version: 1, resources, openapi: `${PUBLIC}/openapi.json`,
              contact: "farmmer938@gmail.com" });
 });
@@ -576,6 +822,67 @@ app.post("/audit", (req, res) => {
     if (!csv) return res.status(400).json({ ok: false, error: "provide csv (string) or json (array)" });
     res.json({ ok: true, input: "csv", report: auditCsv(csv, { delimiter: body.delimiter }) });
   } catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
+});
+
+const ART_THEME_PAID = /^\/art\/themes\/([a-z0-9-]+)\/(wallpaper|wallpaper-1080x2340|lockscreen|icon-background|icon-foreground|theme)(\.png|\.json)?$/;
+app.get(ART_THEME_PAID, (req, res) => {
+  const name = req.params[1].endsWith(".json") ? "theme.json" : `${req.params[1]}.png`;
+  const f = artFile("themes", req.params[0], name);
+  if (!f) return res.status(404).json({ error: "not found", asked: name });
+  res.type(name.endsWith(".json") ? "application/json" : "image/png");
+  res.setHeader("X-Art-License", "AF Commercial License v1 - unlimited commercial use");
+  res.send(fs.readFileSync(f));
+});
+
+app.get(ART_FULL, (req, res) => {
+  const f = artFile(req.params[0], req.params[1], "art.png");
+  if (!f) return res.status(404).json({ error: "not found" });
+  const meta = artFile(req.params[0], req.params[1], "meta.json");
+  res.type("image/png");
+  res.setHeader("X-Art-License", "AF Commercial License v1 - unlimited commercial use");
+  if (meta) {
+    // HTTP headers are latin-1 only; the metadata carries em dashes and a licence blurb.
+    const safe = JSON.stringify(JSON.parse(fs.readFileSync(meta, "utf8")))
+      .replace(/[^\x20-\x7E]/g, "-").slice(0, 900);
+    res.setHeader("X-Art-Meta", safe);
+  }
+  res.send(fs.readFileSync(f));
+});
+
+const ART_STICKER_PAID = /^\/art\/stickers\/([a-z0-9-]+)\/([a-z0-9-]+\.png)$/;
+app.get(ART_STICKER_PAID, (req, res) => {
+  const f = artFile("stickers", req.params[0], req.params[1]);
+  if (!f) return res.status(404).json({ error: "not found" });
+  res.type("image/png");
+  res.setHeader("X-Art-License", "AF Commercial License v1 - unlimited commercial use");
+  res.send(fs.readFileSync(f));
+});
+
+// The paid APK. A buyer pays once and gets the installable app, which is the friction-free path
+// K asked for: no per-file downloads, no moving images through Photos.
+app.get("/art/app/:name", (req, res) => {
+  const name = String(req.params.name).replace(/[^a-z0-9.-]/gi, "");
+  if (!name.endsWith(".apk")) return res.status(404).json({ error: "not found" });
+  const f = path.join(ART_DIR, "apk", name);
+  if (!fs.existsSync(f)) return res.status(404).json({ error: "not built" });
+  res.setHeader("Content-Type", "application/vnd.android.package-archive");
+  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.setHeader("Content-Length", String(fs.statSync(f).size));
+  res.setHeader("X-Art-License", "AF Commercial License v1 - unlimited commercial use");
+  fs.createReadStream(f).pipe(res);
+});
+
+// Premium no-install delivery: the full 2160x4680 masters as one ZIP, paid, no app involved.
+app.get("/art/wallpapers/:name", (req, res) => {
+  const name = String(req.params.name).replace(/[^a-z0-9.-]/gi, "");
+  if (!name.endsWith(".zip")) return res.status(404).json({ error: "not found" });
+  const f = path.join(ART_DIR, "bundles", name);
+  if (!fs.existsSync(f)) return res.status(404).json({ error: "not built" });
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.setHeader("Content-Length", String(fs.statSync(f).size));
+  res.setHeader("X-Art-License", "AF Commercial License v1 - unlimited commercial use");
+  fs.createReadStream(f).pipe(res);
 });
 
 const PORT = process.env.PORT || 12000;
