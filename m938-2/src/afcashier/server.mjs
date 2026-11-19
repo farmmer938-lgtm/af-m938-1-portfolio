@@ -415,6 +415,66 @@ app.use(paymentMiddleware({
       output: { example: { ok: true, report: { schema: "af.data_audit.v1", score: 73, grade: "C", readyToLoad: false, findings: [] } } },
     }),
   },
+  "GET /csv_to_json": {
+    accepts: acceptsFor(),
+    resource: `${PUBLIC}/csv_to_json`,
+    description: "Convert CSV text to typed JSON (delimiter sniffing, quoted fields, number/bool inference). GET returns this endpoint's machine-readable contract (method, input schema, example, price); send POST with a JSON body to run it.",
+    mimeType: "application/json",
+    serviceName: "AF DataBridge",
+    tags: ["csv","json","data","etl","converter"],
+    extensions: declareDiscoveryExtension({
+      method: "GET",
+      output: { example: { ok: true, endpoint: "/csv_to_json", method: "POST", inputSchema: {}, example: {} } },
+    }),
+  },
+  "GET /kpi_score": {
+    accepts: acceptsFor(),
+    resource: `${PUBLIC}/kpi_score`,
+    description: "Score weighted KPIs to 0..100 with higher/lower-is-better normalisation. GET returns this endpoint's machine-readable contract (method, input schema, example, price); send POST with a JSON body to run it.",
+    mimeType: "application/json",
+    serviceName: "AF DataBridge",
+    tags: ["kpi","metrics","scoring","analytics"],
+    extensions: declareDiscoveryExtension({
+      method: "GET",
+      output: { example: { ok: true, endpoint: "/kpi_score", method: "POST", inputSchema: {}, example: {} } },
+    }),
+  },
+  "GET /csv_to_sql": {
+    accepts: acceptsFor(SQL_PRICE),
+    resource: `${PUBLIC}/csv_to_sql`,
+    description: "Convert CSV text to runnable SQL: CREATE TABLE with inferred column types plus INSERT statements. GET returns this endpoint's machine-readable contract (method, input schema, example, price); send POST with a JSON body to run it.",
+    mimeType: "application/json",
+    serviceName: "AF DataBridge",
+    tags: ["csv","sql","etl","database","schema","ddl"],
+    extensions: declareDiscoveryExtension({
+      method: "GET",
+      output: { example: { ok: true, endpoint: "/csv_to_sql", method: "POST", inputSchema: {}, example: {} } },
+    }),
+  },
+  "GET /x402_check": {
+    accepts: acceptsFor(CHECK_PRICE),
+    resource: `${PUBLIC}/x402_check`,
+    description: "Check whether an endpoint answers with a well-formed x402 402 challenge before you pay it. GET returns this endpoint's machine-readable contract (method, input schema, example, price); send POST with a JSON body to run it.",
+    mimeType: "application/json",
+    serviceName: "AF DataBridge",
+    tags: ["x402","endpoint","verify","health","payment","discovery"],
+    extensions: declareDiscoveryExtension({
+      method: "GET",
+      output: { example: { ok: true, endpoint: "/x402_check", method: "POST", inputSchema: {}, example: {} } },
+    }),
+  },
+  "GET /audit": {
+    accepts: acceptsFor(AUDIT_PRICE),
+    resource: `${PUBLIC}/audit`,
+    description: "Data-quality audit: deterministic report (shape, types, nulls, duplicates, outliers) with a 0-100 score. GET returns this endpoint's machine-readable contract (method, input schema, example, price); send POST with a JSON body to run it.",
+    mimeType: "application/json",
+    serviceName: "AF DataBridge",
+    tags: ["data","quality","audit","csv","json","validation","etl"],
+    extensions: declareDiscoveryExtension({
+      method: "GET",
+      output: { example: { ok: true, endpoint: "/audit", method: "POST", inputSchema: {}, example: {} } },
+    }),
+  },
 }, resourceServer));
 
 // Receipts are signed in the settlement hook: funds have already moved on-chain, so a
@@ -587,6 +647,16 @@ app.get("/openapi.json", (_req, res) => res.json({
       },
     },
     "/csv_to_json": {
+      get: {
+        operationId: "csv_to_json_contract",
+        summary: "Machine-readable contract for /csv_to_json (what to POST, what you get back)",
+        tags: ["Discovery"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.05" }, protocols: [{ x402: {} }] },
+        responses: {
+          200: { description: "Contract: method, body example, output example, price, network", content: { "application/json": { schema: { type: "object" } } } },
+          402: { description: "Payment Required" },
+        },
+      },
       post: {
         operationId: "csv_to_json",
         summary: "Convert CSV text to typed JSON",
@@ -612,6 +682,16 @@ app.get("/openapi.json", (_req, res) => res.json({
       },
     },
     "/kpi_score": {
+      get: {
+        operationId: "kpi_score_contract",
+        summary: "Machine-readable contract for /kpi_score (what to POST, what you get back)",
+        tags: ["Discovery"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.05" }, protocols: [{ x402: {} }] },
+        responses: {
+          200: { description: "Contract: method, body example, output example, price, network", content: { "application/json": { schema: { type: "object" } } } },
+          402: { description: "Payment Required" },
+        },
+      },
       post: {
         operationId: "kpi_score",
         summary: "Score weighted KPIs to 0..1",
@@ -641,6 +721,16 @@ app.get("/openapi.json", (_req, res) => res.json({
       },
     },
     "/csv_to_sql": {
+      get: {
+        operationId: "csv_to_sql_contract",
+        summary: "Machine-readable contract for /csv_to_sql (what to POST, what you get back)",
+        tags: ["Discovery"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.08" }, protocols: [{ x402: {} }] },
+        responses: {
+          200: { description: "Contract: method, body example, output example, price, network", content: { "application/json": { schema: { type: "object" } } } },
+          402: { description: "Payment Required" },
+        },
+      },
       post: {
         operationId: "csv_to_sql",
         summary: "Convert CSV text to runnable SQL (DDL + INSERT)",
@@ -668,6 +758,16 @@ app.get("/openapi.json", (_req, res) => res.json({
       },
     },
     "/x402_check": {
+      get: {
+        operationId: "x402_check_contract",
+        summary: "Machine-readable contract for /x402_check (what to POST, what you get back)",
+        tags: ["Discovery"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.08" }, protocols: [{ x402: {} }] },
+        responses: {
+          200: { description: "Contract: method, body example, output example, price, network", content: { "application/json": { schema: { type: "object" } } } },
+          402: { description: "Payment Required" },
+        },
+      },
       post: {
         operationId: "x402_check",
         summary: "Check an endpoint answers with a well-formed x402 402 challenge",
@@ -698,6 +798,16 @@ app.get("/openapi.json", (_req, res) => res.json({
       },
     },
     "/audit": {
+      get: {
+        operationId: "audit_contract",
+        summary: "Machine-readable contract for /audit (what to POST, what you get back)",
+        tags: ["Discovery"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "49" }, protocols: [{ x402: {} }] },
+        responses: {
+          200: { description: "Contract: method, body example, output example, price, network", content: { "application/json": { schema: { type: "object" } } } },
+          402: { description: "Payment Required" },
+        },
+      },
       post: {
         operationId: "audit",
         summary: "Data-quality audit of CSV or JSON (hero product)",
@@ -788,6 +898,32 @@ app.get(/^\/work\/.+/, (req, res) => {
   }
   res.type(path.extname(file) || "text/plain").send(fs.readFileSync(file));
 });
+
+// Discovery contract. Probers and buyers probe with GET before they pay; answering 404 made
+// every catalogue treat AF as a dead seller. GET is a real, priced resource that returns the
+// endpoint's contract, so a GET probe always meets a well-formed 402 and can quote AF.
+const CONTRACTS = {
+  csv_to_json: { price: PRICE, body: { csv: "a,b\n1,true", delimiter: "," },
+    output: { ok: true, rows: [{ a: 1, b: true }] } },
+  kpi_score: { price: PRICE, body: { metrics: [{ name: "uptime", value: 99.5, target: 99.9, direction: "higher", weight: 1 }] },
+    output: { ok: true, score: { score: 0.99, breakdown: [] } } },
+  csv_to_sql: { price: SQL_PRICE, body: { csv: "name,age\nAnn,31", table: "people", dialect: "postgres" },
+    output: { ok: true, sql: { dialect: "postgres", ddl: "CREATE TABLE ...", dml: "INSERT INTO ..." } } },
+  x402_check: { price: CHECK_PRICE, body: { url: "https://example.com/paid-route", method: "GET" },
+    output: { ok: true, is_x402: true, ready_to_pay: true, accepts: [] } },
+  audit: { price: AUDIT_PRICE, body: { csv: "id,name\n1,ann\n2,bob" },
+    output: { ok: true, report: { schema: "af.data_audit.v1", score: 73, grade: "C", findings: [] } } },
+};
+for (const [name, c] of Object.entries(CONTRACTS)) {
+  app.get(`/${name}`, (req, res) => {
+    res.json({
+      ok: true, endpoint: `/${name}`, method: "POST", contentType: "application/json",
+      price: c.price, network: NET, payTo: PAY_TO,
+      body: c.body, output: c.output,
+      note: "POST this body to the same URL to run the tool. GET only describes it.",
+    });
+  });
+}
 
 app.post("/csv_to_json", (req, res) => {
   try { res.json({ ok: true, rows: csvToJson(String(req.body?.csv ?? "")) }); }
@@ -884,6 +1020,17 @@ app.get("/art/wallpapers/:name", (req, res) => {
   res.setHeader("X-Art-License", "AF Commercial License v1 - unlimited commercial use");
   fs.createReadStream(f).pipe(res);
 });
+
+// Registered last on purpose: GET (paywalled contract) and POST (paid tool) must match first.
+// A prober that gets 404 concludes the seller is gone; 405 proves the resource exists.
+for (const name of Object.keys(CONTRACTS)) {
+  app.all(`/${name}`, (req, res) => {
+    res.set("Allow", "GET, HEAD, POST").status(405).json({
+      ok: false, error: "method not allowed", endpoint: `/${name}`,
+      allowed: ["GET", "HEAD", "POST"], hint: "GET describes the tool, POST runs it",
+    });
+  });
+}
 
 const PORT = process.env.PORT || 12000;
 app.listen(PORT, () => console.log("AF cashier on :" + PORT + " payTo=" + PAY_TO + " price=" + PRICE));
