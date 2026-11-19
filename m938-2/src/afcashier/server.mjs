@@ -903,23 +903,66 @@ app.get(/^\/work\/.+/, (req, res) => {
 // every catalogue treat AF as a dead seller. GET is a real, priced resource that returns the
 // endpoint's contract, so a GET probe always meets a well-formed 402 and can quote AF.
 const CONTRACTS = {
-  csv_to_json: { price: PRICE, body: { csv: "a,b\n1,true", delimiter: "," },
-    output: { ok: true, rows: [{ a: 1, b: true }] } },
-  kpi_score: { price: PRICE, body: { metrics: [{ name: "uptime", value: 99.5, target: 99.9, direction: "higher", weight: 1 }] },
-    output: { ok: true, score: { score: 0.99, breakdown: [] } } },
-  csv_to_sql: { price: SQL_PRICE, body: { csv: "name,age\nAnn,31", table: "people", dialect: "postgres" },
-    output: { ok: true, sql: { dialect: "postgres", ddl: "CREATE TABLE ...", dml: "INSERT INTO ..." } } },
-  x402_check: { price: CHECK_PRICE, body: { url: "https://example.com/paid-route", method: "GET" },
-    output: { ok: true, is_x402: true, ready_to_pay: true, accepts: [] } },
-  audit: { price: AUDIT_PRICE, body: { csv: "id,name\n1,ann\n2,bob" },
-    output: { ok: true, report: { schema: "af.data_audit.v1", score: 73, grade: "C", findings: [] } } },
+  csv_to_json: {
+    price: PRICE, body: { csv: "a,b\n1,true", delimiter: "," },
+    output: { ok: true, rows: [{ a: 1, b: true }] },
+    requestSchema: { type: "object", required: ["csv"], properties: {
+      csv: { type: "string", description: "CSV text with a header row" },
+      delimiter: { type: "string", description: "Optional , ; | or tab; auto-sniffed when omitted" } } },
+    responseSchema: { type: "object", properties: { ok: { type: "boolean" },
+      rows: { type: "array", items: { type: "object" }, description: "Typed rows: numbers and booleans inferred" } } },
+  },
+  kpi_score: {
+    price: PRICE, body: { metrics: [{ name: "uptime", value: 99.5, target: 99.9, direction: "higher", weight: 1 }] },
+    output: { ok: true, score: { score: 0.99, breakdown: [] } },
+    requestSchema: { type: "object", required: ["metrics"], properties: { metrics: { type: "array", items: {
+      type: "object", required: ["name", "value", "target"], properties: {
+        name: { type: "string" }, value: { type: "number" }, target: { type: "number" },
+        direction: { type: "string", enum: ["higher", "lower"] }, weight: { type: "number" } } } } } },
+    responseSchema: { type: "object", properties: { ok: { type: "boolean" }, score: { type: "object", properties: {
+      score: { type: "number", description: "0..1 normalised" }, breakdown: { type: "array", items: { type: "object" } } } } } },
+  },
+  csv_to_sql: {
+    price: SQL_PRICE, body: { csv: "name,age\nAnn,31", table: "people", dialect: "postgres" },
+    output: { ok: true, sql: { dialect: "postgres", ddl: "CREATE TABLE ...", dml: "INSERT INTO ..." } },
+    requestSchema: { type: "object", required: ["csv"], properties: { csv: { type: "string" },
+      table: { type: "string" }, dialect: { type: "string", enum: ["postgres", "mysql", "sqlite"] },
+      delimiter: { type: "string" } } },
+    responseSchema: { type: "object", properties: { ok: { type: "boolean" }, sql: { type: "object", properties: {
+      dialect: { type: "string" }, ddl: { type: "string" }, dml: { type: "string" },
+      columns: { type: "array", items: { type: "object" } } } } } },
+  },
+  x402_check: {
+    price: CHECK_PRICE, body: { url: "https://example.com/paid-route", method: "GET" },
+    output: { ok: true, is_x402: true, ready_to_pay: true, accepts: [] },
+    requestSchema: { type: "object", required: ["url"], properties: { url: { type: "string" },
+      method: { type: "string", enum: ["GET", "POST"] }, body: { type: "object" } } },
+    responseSchema: { type: "object", properties: { ok: { type: "boolean" }, is_x402: { type: "boolean" },
+      ready_to_pay: { type: "boolean" }, accepts: { type: "array", items: { type: "object" } },
+      warnings: { type: "array", items: { type: "string" } } } },
+  },
+  audit: {
+    price: AUDIT_PRICE, body: { csv: "id,name\n1,ann\n2,bob" },
+    output: { ok: true, report: { schema: "af.data_audit.v1", score: 73, grade: "C", findings: [] } },
+    requestSchema: { type: "object", properties: { csv: { type: "string" },
+      json: { type: "array", items: { type: "object" } }, delimiter: { type: "string" } } },
+    responseSchema: { type: "object", properties: { ok: { type: "boolean" }, report: { type: "object", properties: {
+      schema: { type: "string" }, score: { type: "number" }, grade: { type: "string" },
+      readyToLoad: { type: "boolean" }, findings: { type: "array", items: { type: "object" } } } } } },
+  },
 };
 for (const [name, c] of Object.entries(CONTRACTS)) {
   app.get(`/${name}`, (req, res) => {
     res.json({
-      ok: true, endpoint: `/${name}`, method: "POST", contentType: "application/json",
-      price: c.price, network: NET, payTo: PAY_TO,
+      ok: true, schema: "af.tool_contract.v1",
+      endpoint: `/${name}`, method: "POST", contentType: "application/json",
+      price: c.price, network: NET, payTo: PAY_TO, asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       body: c.body, output: c.output,
+      // A buyer's agent must be able to integrate from this one response: exact request
+      // shape, exact response shape, and a runnable curl it can copy.
+      requestSchema: c.requestSchema,
+      responseSchema: c.responseSchema,
+      curl: `curl -X POST ${PUBLIC}/${name} -H 'Content-Type: application/json' -d '${JSON.stringify(c.body)}'`,
       note: "POST this body to the same URL to run the tool. GET only describes it.",
     });
   });
