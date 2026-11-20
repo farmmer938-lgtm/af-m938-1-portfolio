@@ -64,7 +64,19 @@ const WORK_DIR = process.env.AF_WORK_DIR
   || path.join(path.dirname(fileURLToPath(import.meta.url)), "work");
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
+// A body-parser rejection is a 400 before any route runs, so it never reaches a handler and
+// never reaches the demand log. Record it: a buyer whose payload we cannot parse is a lost sale.
+app.use((err, req, res, next) => {
+  if (err && (err.type === "entity.parse.failed" || err.status === 400)) {
+    try { fs.appendFileSync("/workspace/.af-llm-reject.log",
+      JSON.stringify({ ts: new Date().toISOString(), kind: "body_parse", path: req.path,
+        method: req.method, ua: req.headers["user-agent"], ct: req.headers["content-type"],
+        len: req.headers["content-length"], msg: String(err.message).slice(0, 200) }) + "\n"); } catch {}
+    return res.status(400).json({ ok: false, error: "body must be valid JSON" });
+  }
+  next(err);
+});
 
 // DEMAND MEASUREMENT (vendor quorum 2026-11-16, 5/5): AF could not tell whether any external
 // buyer ever hit the paywall — the only traffic on record was AF's own tests. Every request
@@ -299,6 +311,31 @@ function runLlm(messages, model, cb) {
   child.stdin.end(payload);
 }
 
+app.get("/llm/trial", (req, res) => {
+  let messages = null;
+  if (typeof req.query.messages === "string") {
+    try { messages = JSON.parse(req.query.messages); } catch { /* fall through */ }
+  }
+  if (!Array.isArray(messages) && typeof req.query.prompt === "string" && req.query.prompt.trim()) {
+    messages = [{ role: "user", content: req.query.prompt }];
+  }
+  if (!Array.isArray(messages) || !messages.length) {
+    return res.status(400).json({ ok: false,
+      error: "pass ?prompt=your question",
+      example: `${PUBLIC}/llm/trial?prompt=What%20is%2017*23%3F` });
+  }
+  const chars = messages.reduce((n, m) => n + String(m?.content ?? "").length, 0);
+  if (chars > LLM_TRIAL_MAX_CHARS) {
+    return res.status(413).json({ ok: false, error: `trial caps the prompt at ${LLM_TRIAL_MAX_CHARS} chars`,
+      ...upgrade("llm", LLM_PRICE) });
+  }
+  trialLog("llm", true, `${chars}ch`);
+  runLlm(messages, req.query.model, (e, out) => {
+    if (e) return res.status(e.status).json(e.body);
+    res.json({ ...out, trial: true, upgrade: upgrade("llm", LLM_PRICE) });
+  });
+});
+
 app.post("/llm/trial", (req, res) => {
   const messages = normalizeMessages(req.body);
   if (!messages) {
@@ -346,6 +383,27 @@ app.use(paymentMiddleware({
           },
           temperature: { type: "number", description: "Sampling temperature, 0-2" },
           max_tokens: { type: "integer", description: "Upper bound on reply length" },
+        },
+      },
+      output: { example: { ok: true, model: "yqcloud", choices: [{ message: { role: "assistant", content: "391" } }] } },
+    }),
+  },
+  "GET /llm": {
+    accepts: acceptsFor(LLM_PRICE),
+    resource: `${PUBLIC}/llm`,
+    description: "OpenAI-compatible chat completion by GET: pass ?prompt=... (or ?messages=<url-encoded JSON>) and receive {choices:[...]}. Paid per call in USDC on Base, no account or API key.",
+    mimeType: "application/json",
+    serviceName: "AF Inference",
+    tags: ["llm", "ai", "chat", "inference", "openai-compatible", "completion", "get"],
+    extensions: declareDiscoveryExtension({
+      method: "GET",
+      input: { prompt: "What is 17*23? Reply with the number only." },
+      inputSchema: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "The question to answer" },
+          messages: { type: "string", description: "Alternative: URL-encoded JSON array of chat messages" },
+          model: { type: "string", description: "Optional model override" },
         },
       },
       output: { example: { ok: true, model: "yqcloud", choices: [{ message: { role: "assistant", content: "391" } }] } },
@@ -996,6 +1054,14 @@ app.get("/.well-known/x402", (_req, res) => {
     for (const rail of rails) {
       resources.push({ resource: `${PUBLIC}/${r[0]}`, method: "POST", price: r[2],
                        network: rail.net, payTo: rail.payTo, description: r[1] });
+      // /llm also answers a paid GET (?prompt=...). Catalogues that recorded the verb they
+      // first probed list it as GET, and a scout buys the verb the listing declares, so both
+      // verbs must be payable and both must be published.
+      if (r[0] === "llm") {
+        resources.push({ resource: `${PUBLIC}/llm`, method: "GET", price: r[2],
+                         network: rail.net, payTo: rail.payTo,
+                         description: "Same completion over GET: ?prompt=... or ?messages=<url-encoded JSON>." });
+      }
     }
   }
   for (const rail of rails) {
@@ -1081,21 +1147,6 @@ const CONTRACTS = {
       ready_to_pay: { type: "boolean" }, accepts: { type: "array", items: { type: "object" } },
       warnings: { type: "array", items: { type: "string" } } } },
   },
-  llm: {
-    price: LLM_PRICE, body: { messages: [{ role: "user", content: "What is 17*23? Reply with the number only." }] },
-    output: { ok: true, model: "yqcloud", choices: [{ message: { role: "assistant", content: "391" } }] },
-    requestSchema: { type: "object", required: ["messages"], properties: {
-      messages: { type: "array", description: "OpenAI chat messages, oldest first", items: {
-        type: "object", required: ["role", "content"],
-        properties: { role: { type: "string", enum: ["system", "user", "assistant"] },
-                      content: { type: "string" } } } },
-      temperature: { type: "number", description: "Sampling temperature, 0-2" },
-      max_tokens: { type: "integer", description: "Upper bound on reply length" } } },
-    responseSchema: { type: "object", properties: { ok: { type: "boolean" },
-      model: { type: "string" },
-      choices: { type: "array", items: { type: "object", properties: {
-        message: { type: "object", properties: { role: { type: "string" }, content: { type: "string" } } } } } } } },
-  },
   seller_verify: {
     price: VERIFY_PRICE, body: { url: "https://api.bitrefill.com/x402/invoice/pay" },
     output: { ok: true, schema: "af.seller_verify.v1", verdict: "REAL", genuineShare: 1,
@@ -1152,9 +1203,31 @@ app.get("/x402/leaderboard", (_req, res) => {
 // Paid LLM inference. The buyer pays first (middleware above), so a failed completion must
 // not silently return 200 — it returns 502 with the provider error so the caller can retry
 // or dispute, and the receipt still proves what they paid for.
+app.get("/llm", (req, res) => {
+  let messages = null;
+  if (typeof req.query.messages === "string") {
+    try { messages = JSON.parse(req.query.messages); } catch { /* fall through to prompt */ }
+  }
+  if (!Array.isArray(messages) && typeof req.query.prompt === "string" && req.query.prompt.trim()) {
+    messages = [{ role: "user", content: req.query.prompt }];
+  }
+  if (!Array.isArray(messages) || !messages.length) {
+    return res.status(400).json({ ok: false,
+      error: "pass ?prompt=your question (or ?messages=<url-encoded JSON array>)",
+      example: `${PUBLIC}/llm?prompt=What%20is%2017*23%3F` });
+  }
+  runLlm(messages, req.query.model, (e, out) => {
+    if (e) return res.status(e.status).json(e.body);
+    res.json(out);
+  });
+});
+
 app.post("/llm", (req, res) => {
   const messages = normalizeMessages(req.body);
   if (!messages) {
+    try { fs.appendFileSync("/workspace/.af-llm-reject.log",
+      JSON.stringify({ ts: new Date().toISOString(), ct: req.headers["content-type"], ua: req.headers["user-agent"],
+        raw: JSON.stringify(req.body).slice(0, 1500) }) + "\n"); } catch {}
     return res.status(400).json({ ok: false, error: "send {messages:[{role,content}]} (or {prompt:'...'})" });
   }
   runLlm(messages, req.body?.model, (e, out) => {
