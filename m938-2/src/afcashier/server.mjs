@@ -87,7 +87,7 @@ function demandLog(req) {
     }) + "\n");
   } catch { /* logging must never break the response */ }
 }
-const DEMAND_PATHS = /^\/(csv_to_json|kpi_score|csv_to_sql|audit|x402_check|trial\/.*)$/;
+const DEMAND_PATHS = /^\/(csv_to_json|kpi_score|csv_to_sql|audit|x402_check|llm|seller_verify|trial\/.*)$/;
 app.use((req, _res, next) => { if (DEMAND_PATHS.test(req.path)) demandLog(req); next(); });
 
 const facilitator = new HTTPFacilitatorClient({ url: "https://facilitator.payai.network" });
@@ -990,7 +990,9 @@ app.get("/.well-known/x402", (_req, res) => {
                    ["kpi_score", "Score weighted KPIs to 0..1.", PRICE],
                    ["csv_to_sql", "Convert CSV text to runnable SQL (postgres/mysql/sqlite).", SQL_PRICE],
                    ["x402_check", "Check an endpoint answers with a well-formed x402 402 challenge.", CHECK_PRICE],
-                   ["audit", "Data-quality audit of CSV/JSON: score, grade, ready-to-load verdict, per-column findings.", AUDIT_PRICE]]) {
+                   ["audit", "Data-quality audit of CSV/JSON: score, grade, ready-to-load verdict, per-column findings.", AUDIT_PRICE],
+                   ["llm", "OpenAI-compatible chat completion. Send {messages:[...]}, get {choices:[...]} back. No account, no API key.", LLM_PRICE],
+                   ["seller_verify", "Chain-truth revenue verification for an x402 seller URL: settled vs self-paid vs negligible, with evidence.", VERIFY_PRICE]]) {
     for (const rail of rails) {
       resources.push({ resource: `${PUBLIC}/${r[0]}`, method: "POST", price: r[2],
                        network: rail.net, payTo: rail.payTo, description: r[1] });
@@ -1078,6 +1080,21 @@ const CONTRACTS = {
     responseSchema: { type: "object", properties: { ok: { type: "boolean" }, is_x402: { type: "boolean" },
       ready_to_pay: { type: "boolean" }, accepts: { type: "array", items: { type: "object" } },
       warnings: { type: "array", items: { type: "string" } } } },
+  },
+  llm: {
+    price: LLM_PRICE, body: { messages: [{ role: "user", content: "What is 17*23? Reply with the number only." }] },
+    output: { ok: true, model: "yqcloud", choices: [{ message: { role: "assistant", content: "391" } }] },
+    requestSchema: { type: "object", required: ["messages"], properties: {
+      messages: { type: "array", description: "OpenAI chat messages, oldest first", items: {
+        type: "object", required: ["role", "content"],
+        properties: { role: { type: "string", enum: ["system", "user", "assistant"] },
+                      content: { type: "string" } } } },
+      temperature: { type: "number", description: "Sampling temperature, 0-2" },
+      max_tokens: { type: "integer", description: "Upper bound on reply length" } } },
+    responseSchema: { type: "object", properties: { ok: { type: "boolean" },
+      model: { type: "string" },
+      choices: { type: "array", items: { type: "object", properties: {
+        message: { type: "object", properties: { role: { type: "string" }, content: { type: "string" } } } } } } } },
   },
   seller_verify: {
     price: VERIFY_PRICE, body: { url: "https://api.bitrefill.com/x402/invoice/pay" },
