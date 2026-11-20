@@ -32,7 +32,10 @@ const AUDIT_PRICE = process.env.AF_AUDIT_PRICE || "$49";
 // Demand forensics: the only product here that checks a claim against settled money rather than
 // against a catalogue's self-reported counters. Priced above the data tools because a buyer uses it
 // to decide whether to spend hundreds of dollars with an unverified seller.
-const VERIFY_PRICE = process.env.AF_VERIFY_PRICE || "$1";
+// Priced at the scout's weekly ceiling. Settled's free re-test and its recurring weekly buys
+// cover endpoints up to $0.25; a $1.00 listing is simply never bought, so the ceiling price
+// earns more than the premium one. Override with AF_VERIFY_PRICE for a direct human buyer.
+const VERIFY_PRICE = process.env.AF_VERIFY_PRICE || "$0.25";
 // LLM inference: the one x402 category with proven repeat demand (a competing gateway took
 // $11,500 from 18 buyers in 8 days — see artifacts/market_intel/x402_revenue_census.json).
 // Agents buy it mid-task because they cannot finish without a completion. Priced under the
