@@ -36,6 +36,7 @@ const AUDIT_PRICE = process.env.AF_AUDIT_PRICE || "$49";
 // cover endpoints up to $0.25; a $1.00 listing is simply never bought, so the ceiling price
 // earns more than the premium one. Override with AF_VERIFY_PRICE for a direct human buyer.
 const VERIFY_PRICE = process.env.AF_VERIFY_PRICE || "$0.25";
+const GET_TWIN_PRICE = process.env.AF_GET_TWIN_PRICE || "$0.25";
 // LLM inference: the one x402 category with proven repeat demand (a competing gateway took
 // $11,500 from 18 buyers in 8 days — see artifacts/market_intel/x402_revenue_census.json).
 // Agents buy it mid-task because they cannot finish without a completion. Priced under the
@@ -355,7 +356,7 @@ app.post("/llm/trial", (req, res) => {
   });
 });
 
-app.use(paymentMiddleware({
+const ROUTES = {
   "POST /llm": {
     accepts: acceptsFor(LLM_PRICE),
     resource: `${PUBLIC}/llm`,
@@ -614,30 +615,6 @@ app.use(paymentMiddleware({
       output: { example: { ok: true, endpoint: "/kpi_score", method: "POST", inputSchema: {}, example: {} } },
     }),
   },
-  "GET /csv_to_sql": {
-    accepts: acceptsFor(SQL_PRICE),
-    resource: `${PUBLIC}/csv_to_sql`,
-    description: "Convert CSV text to runnable SQL: CREATE TABLE with inferred column types plus INSERT statements. GET returns this endpoint's machine-readable contract (method, input schema, example, price); send POST with a JSON body to run it.",
-    mimeType: "application/json",
-    serviceName: "AF DataBridge",
-    tags: ["csv","sql","etl","database","schema","ddl"],
-    extensions: declareDiscoveryExtension({
-      method: "GET",
-      output: { example: { ok: true, endpoint: "/csv_to_sql", method: "POST", inputSchema: {}, example: {} } },
-    }),
-  },
-  "GET /x402_check": {
-    accepts: acceptsFor(CHECK_PRICE),
-    resource: `${PUBLIC}/x402_check`,
-    description: "Check whether an endpoint answers with a well-formed x402 402 challenge before you pay it. GET returns this endpoint's machine-readable contract (method, input schema, example, price); send POST with a JSON body to run it.",
-    mimeType: "application/json",
-    serviceName: "AF DataBridge",
-    tags: ["x402","endpoint","verify","health","payment","discovery"],
-    extensions: declareDiscoveryExtension({
-      method: "GET",
-      output: { example: { ok: true, endpoint: "/x402_check", method: "POST", inputSchema: {}, example: {} } },
-    }),
-  },
   "GET /seller_verify": {
     accepts: acceptsFor(VERIFY_PRICE),
     resource: `${PUBLIC}/seller_verify`,
@@ -650,19 +627,35 @@ app.use(paymentMiddleware({
       output: { example: { ok: true, endpoint: "/seller_verify", method: "POST", verdicts: ["REAL","MIXED","SELF_PAY","NEGLIGIBLE","NO_SETTLEMENT"] } },
     }),
   },
-  "GET /audit": {
-    accepts: acceptsFor(AUDIT_PRICE),
-    resource: `${PUBLIC}/audit`,
-    description: "Data-quality audit: deterministic report (shape, types, nulls, duplicates, outliers) with a 0-100 score. GET returns this endpoint's machine-readable contract (method, input schema, example, price); send POST with a JSON body to run it.",
-    mimeType: "application/json",
-    serviceName: "AF DataBridge",
-    tags: ["data","quality","audit","csv","json","validation","etl"],
+};
+
+// The scout buys one purchase per endpoint per week and reads the verb the listing declares,
+// so a tool reachable only by POST is a tool the scout never buys. Each GET twin below is a
+// separate discovery entry and a separate weekly purchase, at the scout's $0.25 ceiling.
+const GET_TWINS = ["csv_to_json", "kpi_score", "csv_to_sql", "x402_check", "audit"];
+for (const name of GET_TWINS) {
+  const src = ROUTES[`POST /${name}`];
+  if (!src) continue;
+  const postPrice = src.accepts?.[0]?.price;
+  const price = (postPrice && !/^\$?(49|1)$/.test(String(postPrice).replace('$','')))
+    ? postPrice            // a tool priced above the scout's ceiling keeps its POST price
+    : GET_TWIN_PRICE;      // everything else is sold at the scout's weekly ceiling
+  ROUTES[`GET /${name}`] = {
+    accepts: acceptsFor(price),
+    resource: `${PUBLIC}/${name}`,
+    description: `${src.description} GET takes the same input as query parameters.`,
+    mimeType: src.mimeType,
+    serviceName: src.serviceName,
+    tags: src.tags,
     extensions: declareDiscoveryExtension({
       method: "GET",
-      output: { example: { ok: true, endpoint: "/audit", method: "POST", inputSchema: {}, example: {} } },
+      input: src.extensions?.bazaar?.info?.input?.body ?? {},
+      output: { example: src.extensions?.bazaar?.info?.output?.example ?? { ok: true } },
     }),
-  },
-}, resourceServer));
+  };
+}
+
+app.use(paymentMiddleware(ROUTES, resourceServer));
 
 // Receipts are signed in the settlement hook: funds have already moved on-chain, so a
 // failure here is logged, never thrown (it must not fail a settled payment).
@@ -1054,15 +1047,18 @@ app.get("/.well-known/x402", (_req, res) => {
                    ["llm", "OpenAI-compatible chat completion. Send {messages:[...]}, get {choices:[...]} back. No account, no API key.", LLM_PRICE],
                    ["seller_verify", "Chain-truth revenue verification for an x402 seller URL: settled vs self-paid vs negligible, with evidence.", VERIFY_PRICE]]) {
     for (const rail of rails) {
-      resources.push({ resource: `${PUBLIC}/${r[0]}`, method: "POST", price: r[2],
+      resources.push({ resource: `${PUBLIC}/${r[0]}`, method: "POST",
+                       price: ROUTES[`POST /${r[0]}`]?.accepts?.[0]?.price ?? r[2],
                        network: rail.net, payTo: rail.payTo, description: r[1] });
-      // /llm also answers a paid GET (?prompt=...). Catalogues that recorded the verb they
-      // first probed list it as GET, and a scout buys the verb the listing declares, so both
-      // verbs must be payable and both must be published.
-      if (r[0] === "llm") {
-        resources.push({ resource: `${PUBLIC}/llm`, method: "GET", price: r[2],
+      // Every verb the paywall actually charges is published. A scout buys the verb the listing
+      // declares, so a verb left out here is a verb nobody can buy. Reading ROUTES keeps this
+      // list from drifting away from what is really payable.
+      const getRoute = ROUTES[`GET /${r[0]}`];
+      if (getRoute) {
+        resources.push({ resource: `${PUBLIC}/${r[0]}`, method: "GET",
+                         price: getRoute.accepts?.[0]?.price ?? r[2],
                          network: rail.net, payTo: rail.payTo,
-                         description: "Same completion over GET: ?prompt=... or ?messages=<url-encoded JSON>." });
+                         description: `${r[1]} GET takes the same input as query parameters.` });
       }
     }
   }
