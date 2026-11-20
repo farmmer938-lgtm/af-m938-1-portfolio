@@ -38,6 +38,7 @@ const VERIFY_PRICE = process.env.AF_VERIFY_PRICE || "$1";
 // Agents buy it mid-task because they cannot finish without a completion. Priced under the
 // incumbent so a cost-sensitive agent picks us.
 const LLM_PRICE = process.env.AF_LLM_PRICE || "$0.01";
+const LLM_DEFAULT_PROMPT = "What is 17*23? Reply with the number only.";
 const NET = "eip155:8453"; // Base mainnet
 // Solana mainnet (CAIP-2). PayAI is Solana-first and sponsors the network fee, so a buyer
 // needs only USDC — no SOL, and AF needs no gas to be paid. AF's Solana payout address comes
@@ -320,9 +321,7 @@ app.get("/llm/trial", (req, res) => {
     messages = [{ role: "user", content: req.query.prompt }];
   }
   if (!Array.isArray(messages) || !messages.length) {
-    return res.status(400).json({ ok: false,
-      error: "pass ?prompt=your question",
-      example: `${PUBLIC}/llm/trial?prompt=What%20is%2017*23%3F` });
+    messages = [{ role: "user", content: LLM_DEFAULT_PROMPT }];
   }
   const chars = messages.reduce((n, m) => n + String(m?.content ?? "").length, 0);
   if (chars > LLM_TRIAL_MAX_CHARS) {
@@ -364,7 +363,7 @@ app.use(paymentMiddleware({
     extensions: declareDiscoveryExtension({
       method: "POST",
       bodyType: "json",
-      input: { messages: [{ role: "user", content: "What is 17*23? Reply with the number only." }] },
+      input: { messages: [{ role: "user", content: LLM_DEFAULT_PROMPT }] },
       inputSchema: {
         type: "object",
         required: ["messages"],
@@ -397,7 +396,7 @@ app.use(paymentMiddleware({
     tags: ["llm", "ai", "chat", "inference", "openai-compatible", "completion", "get"],
     extensions: declareDiscoveryExtension({
       method: "GET",
-      input: { prompt: "What is 17*23? Reply with the number only." },
+      input: { prompt: LLM_DEFAULT_PROMPT },
       inputSchema: {
         type: "object",
         properties: {
@@ -1211,10 +1210,11 @@ app.get("/llm", (req, res) => {
   if (!Array.isArray(messages) && typeof req.query.prompt === "string" && req.query.prompt.trim()) {
     messages = [{ role: "user", content: req.query.prompt }];
   }
+  // A buyer that has already PAID must always get a completion. Probers and scouts charge a
+  // GET with no query string at all, so fall back to the example this endpoint advertises
+  // rather than answering 400 to a settled payment.
   if (!Array.isArray(messages) || !messages.length) {
-    return res.status(400).json({ ok: false,
-      error: "pass ?prompt=your question (or ?messages=<url-encoded JSON array>)",
-      example: `${PUBLIC}/llm?prompt=What%20is%2017*23%3F` });
+    messages = [{ role: "user", content: LLM_DEFAULT_PROMPT }];
   }
   runLlm(messages, req.query.model, (e, out) => {
     if (e) return res.status(e.status).json(e.body);
