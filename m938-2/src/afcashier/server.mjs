@@ -4,6 +4,7 @@
 // signs an EIP-3009 transfer, retries, and gets the result.
 import express from "express";
 import fs from "node:fs";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { paymentMiddleware, x402ResourceServer } from "@x402/express";
@@ -14,6 +15,7 @@ import { bazaarResourceServerExtension, declareDiscoveryExtension } from "@x402/
 import { csvToJson, csvToSql, score } from "./databridge.mjs";
 import { auditCsv, auditJson } from "./audit.mjs";
 import { checkEndpoint } from "./endpointcheck.mjs";
+import { verifySeller, DEMO_TARGETS } from "./sellerverify.mjs";
 import { record, reputation, readReceipts, signerAddress } from "./receipts.mjs";
 import { classifyIp, summarizeDemand } from "./demand.mjs";
 
@@ -27,6 +29,15 @@ const CHECK_PRICE = process.env.AF_CHECK_PRICE || "$0.08";
 // The data-quality audit is the hero SKU (vendor consult 2026-11-13, 4/6 chose it): a
 // deterministic "is this file safe to load?" report, priced at $49 to sell self-serve.
 const AUDIT_PRICE = process.env.AF_AUDIT_PRICE || "$49";
+// Demand forensics: the only product here that checks a claim against settled money rather than
+// against a catalogue's self-reported counters. Priced above the data tools because a buyer uses it
+// to decide whether to spend hundreds of dollars with an unverified seller.
+const VERIFY_PRICE = process.env.AF_VERIFY_PRICE || "$1";
+// LLM inference: the one x402 category with proven repeat demand (a competing gateway took
+// $11,500 from 18 buyers in 8 days — see artifacts/market_intel/x402_revenue_census.json).
+// Agents buy it mid-task because they cannot finish without a completion. Priced under the
+// incumbent so a cost-sensitive agent picks us.
+const LLM_PRICE = process.env.AF_LLM_PRICE || "$0.01";
 const NET = "eip155:8453"; // Base mainnet
 // Solana mainnet (CAIP-2). PayAI is Solana-first and sponsors the network fee, so a buyer
 // needs only USDC — no SOL, and AF needs no gas to be paid. AF's Solana payout address comes
@@ -255,7 +266,61 @@ app.post("/trial/audit", (req, res) => {
   } catch (e) { trialLog("audit", false, String(e.message || e)); res.status(400).json({ ok: false, error: String(e.message || e) }); }
 });
 
+
+// LLM inference is the one x402 category with proven repeat demand, so the free trial here is
+// deliberately capped rather than absent: an agent can prove the call works before it pays.
+const LLM_BRIDGE = path.join(path.dirname(fileURLToPath(import.meta.url)), "llm_bridge.py");
+const LLM_TRIAL_MAX_CHARS = Number(process.env.AF_LLM_TRIAL_MAX_CHARS || 2000);
+
+function runLlm(messages, model, cb) {
+  const payload = JSON.stringify({ messages, model });
+  const child = spawn("python3", [LLM_BRIDGE], { stdio: ["pipe", "pipe", "pipe"] });
+  let out = "", err = "";
+  const timer = setTimeout(() => child.kill("SIGKILL"), 70_000);
+  child.stdout.on("data", (d) => { out += d; });
+  child.stderr.on("data", (d) => { err += d; });
+  child.on("close", () => {
+    clearTimeout(timer);
+    let parsed = null;
+    try { parsed = JSON.parse(out.trim() || "{}"); } catch { /* fall through */ }
+    if (!parsed) return cb({ status: 502, body: { ok: false, error: "inference bridge failed", detail: (err || out).slice(0, 200) } });
+    if (!parsed.ok) return cb({ status: 502, body: parsed });
+    cb(null, parsed);
+  });
+  child.stdin.end(payload);
+}
+
+app.post("/llm/trial", (req, res) => {
+  const messages = req.body?.messages;
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ ok: false, error: "body.messages must be a non-empty array" });
+  }
+  const chars = messages.reduce((n, m) => n + String(m?.content ?? "").length, 0);
+  if (chars > LLM_TRIAL_MAX_CHARS) {
+    return res.status(413).json({ ok: false, error: `trial caps the prompt at ${LLM_TRIAL_MAX_CHARS} chars`,
+      ...upgrade("llm", LLM_PRICE) });
+  }
+  trialLog("llm", true, `${chars}ch`);
+  runLlm(messages, req.body?.model, (e, out) => {
+    if (e) return res.status(e.status).json(e.body);
+    res.json({ ...out, trial: true, ...upgrade("llm", LLM_PRICE) });
+  });
+});
+
 app.use(paymentMiddleware({
+  "POST /llm": {
+    accepts: acceptsFor(LLM_PRICE),
+    resource: `${PUBLIC}/llm`,
+    description: "OpenAI-compatible chat completion, paid per call in USDC on Base. Send {messages:[...]} and get {choices:[...]} back. No account, no API key, no rate-limit signup.",
+    mimeType: "application/json",
+    serviceName: "AF Inference",
+    tags: ["llm", "ai", "chat", "inference", "openai-compatible", "completion"],
+    extensions: declareDiscoveryExtension({
+      method: "POST",
+      input: { body: { messages: [{ role: "user", content: "What is 17*23? Reply with the number only." }] } },
+      output: { example: { ok: true, model: "yqcloud", choices: [{ message: { role: "assistant", content: "391" } }] } },
+    }),
+  },
   "GET /art/:collection/:slug/art.png": {
     accepts: acceptsFor(ART_PRICE),
     resource: `${PUBLIC}/art/:collection/:slug/art.png`,
@@ -394,6 +459,26 @@ app.use(paymentMiddleware({
       output: { example: { ok: true, url: "https://example.com/paid-route", is_x402: true, ready_to_pay: true, accepts: [] } },
     }),
   },
+  "POST /seller_verify": {
+    accepts: acceptsFor(VERIFY_PRICE),
+    resource: `${PUBLIC}/seller_verify`,
+    description: "On-chain demand verification for any x402 seller: reads the seller's payTo wallet on Base and separates independent buyers from self-paid volume.",
+    mimeType: "application/json",
+    serviceName: "AF DataBridge",
+    tags: ["x402", "trust", "verification", "due-diligence", "onchain"],
+    extensions: declareDiscoveryExtension({
+      method: "POST",
+      bodyType: "json",
+      input: { url: "https://api.bitrefill.com/x402/invoice/pay" },
+      inputSchema: {
+        properties: {
+          url: { type: "string", description: "The x402 seller endpoint to verify (http/https)." },
+        },
+        required: ["url"],
+      },
+      output: { example: { ok: true, schema: "af.seller_verify.v1", verdict: "REAL", genuineShare: 1 } },
+    }),
+  },
   "POST /audit": {
     accepts: acceptsFor(AUDIT_PRICE),
     resource: `${PUBLIC}/audit`,
@@ -461,6 +546,18 @@ app.use(paymentMiddleware({
     extensions: declareDiscoveryExtension({
       method: "GET",
       output: { example: { ok: true, endpoint: "/x402_check", method: "POST", inputSchema: {}, example: {} } },
+    }),
+  },
+  "GET /seller_verify": {
+    accepts: acceptsFor(VERIFY_PRICE),
+    resource: `${PUBLIC}/seller_verify`,
+    description: "On-chain demand verification for any x402 seller. GET returns the contract; POST with {url} runs it. Separates independent buyers from self-paid volume by reading the seller's payTo wallet on Base.",
+    mimeType: "application/json",
+    serviceName: "AF DataBridge",
+    tags: ["x402", "trust", "verification", "due-diligence", "onchain"],
+    extensions: declareDiscoveryExtension({
+      method: "GET",
+      output: { example: { ok: true, endpoint: "/seller_verify", method: "POST", verdicts: ["REAL","MIXED","SELF_PAY","NEGLIGIBLE","NO_SETTLEMENT"] } },
     }),
   },
   "GET /audit": {
@@ -797,6 +894,77 @@ app.get("/openapi.json", (_req, res) => res.json({
         },
       },
     },
+    "/llm": {
+      post: {
+        operationId: "llm_chat_completion",
+        summary: "OpenAI-compatible chat completion, paid per call in USDC on Base",
+        description: "POST {messages:[{role,content}], model?} and receive {choices:[{message:{role,content}}]}. No account, no API key. Priced at $0.01 per call, settled in USDC on Base via x402.",
+        tags: ["AI", "LLM", "Inference"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.01" }, protocols: [{ x402: {} }] },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: {
+            type: "object", required: ["messages"], properties: {
+              messages: { type: "array", items: { type: "object", properties: {
+                role: { type: "string" }, content: { type: "string" } }, required: ["role", "content"] } },
+              model: { type: "string" },
+            },
+          } } },
+        },
+        responses: {
+          200: { description: "Completion", content: { "application/json": { schema: { type: "object" } } } },
+          402: { description: "Payment Required" },
+        },
+      },
+    },
+    "/x402/leaderboard": {
+      get: {
+        operationId: "x402_revenue_leaderboard",
+        summary: "Chain-truth revenue ranking of x402 sellers on Base (top 50, free sample)",
+        description: "Every other x402 directory republishes what sellers claim. This ranks what their wallets actually received in USDC, measured from Transfer logs. The full 769-wallet census with per-wallet evidence is available through POST /seller_verify.",
+        tags: ["Discovery", "MarketData"],
+        responses: {
+          200: { description: "Top-50 sellers by genuine on-chain USDC received", content: { "application/json": { schema: { type: "object" } } } },
+        },
+      },
+    },
+    "/seller_verify": {
+      get: {
+        operationId: "seller_verify_contract",
+        summary: "Machine-readable contract for /seller_verify (what to POST, what you get back)",
+        tags: ["Discovery"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "1" }, protocols: [{ x402: {} }] },
+        responses: {
+          200: { description: "Contract: body example, output example, price, network", content: { "application/json": { schema: { type: "object" } } } },
+          402: { description: "Payment Required" },
+        },
+      },
+      post: {
+        operationId: "seller_verify",
+        summary: "Verify whether an x402 seller's demand is real money or self-paid volume (on-chain)",
+        tags: ["Trust", "Verification"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "1" }, protocols: [{ x402: {} }] },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: {
+            type: "object", required: ["url"], properties: {
+              url: { type: "string", description: "The x402 seller endpoint to verify." },
+            },
+          } } },
+        },
+        responses: {
+          200: { description: "Verdict with the on-chain evidence behind it", content: { "application/json": { schema: {
+            type: "object", properties: {
+              ok: { type: "boolean" }, verdict: { type: "string" }, reason: { type: "string" },
+              genuineShare: { type: "number" }, settled: { type: "object" },
+              genuine: { type: "object" }, selfPay: { type: "object" },
+              evidence: { type: "array", items: { type: "object" } },
+            }, required: ["ok", "verdict"],
+          } } } },
+          402: { description: "Payment Required" },
+        },
+      },
+    },
     "/audit": {
       get: {
         operationId: "audit_contract",
@@ -941,6 +1109,18 @@ const CONTRACTS = {
       ready_to_pay: { type: "boolean" }, accepts: { type: "array", items: { type: "object" } },
       warnings: { type: "array", items: { type: "string" } } } },
   },
+  seller_verify: {
+    price: VERIFY_PRICE, body: { url: "https://api.bitrefill.com/x402/invoice/pay" },
+    output: { ok: true, schema: "af.seller_verify.v1", verdict: "REAL", genuineShare: 1,
+      settled: { usdc: 18923.05, tx: 148, distinctSenders: 133 } },
+    requestSchema: { type: "object", required: ["url"], properties: {
+      url: { type: "string", description: "The x402 seller endpoint to verify, e.g. https://seller.example/paid-route" } } },
+    responseSchema: { type: "object", properties: { ok: { type: "boolean" }, schema: { type: "string" },
+      payTo: { type: "string" }, verdict: { type: "string", enum: ["REAL", "MIXED", "SELF_PAY", "NEGLIGIBLE", "NO_SETTLEMENT"] },
+      reason: { type: "string" }, genuineShare: { type: "number" },
+      settled: { type: "object" }, genuine: { type: "object" }, selfPay: { type: "object" },
+      evidence: { type: "array", items: { type: "object" } } } },
+  },
   audit: {
     price: AUDIT_PRICE, body: { csv: "id,name\n1,ann\n2,bob" },
     output: { ok: true, report: { schema: "af.data_audit.v1", score: 73, grade: "C", findings: [] } },
@@ -967,6 +1147,77 @@ for (const [name, c] of Object.entries(CONTRACTS)) {
     });
   });
 }
+
+
+// Free lead magnet: the only chain-truth revenue ranking of x402 sellers on Base. The full
+// 769-wallet census (with per-wallet evidence) is the paid /seller_verify product; this top-50
+// view exists so a prober can see the method works before paying for anything.
+const LEADERBOARD_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "x402_leaderboard.json");
+app.get("/x402/leaderboard", (_req, res) => {
+  try {
+    res.json({ ok: true, schema: "af.x402.leaderboard.v1", ...JSON.parse(fs.readFileSync(LEADERBOARD_FILE, "utf8")) });
+  } catch (e) {
+    res.status(503).json({ ok: false, error: "leaderboard not built", detail: String(e.message || e).slice(0, 120) });
+  }
+});
+
+
+// Paid LLM inference. The buyer pays first (middleware above), so a failed completion must
+// not silently return 200 — it returns 502 with the provider error so the caller can retry
+// or dispute, and the receipt still proves what they paid for.
+app.post("/llm", (req, res) => {
+  const messages = req.body?.messages;
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ ok: false, error: "body.messages must be a non-empty array" });
+  }
+  runLlm(messages, req.body?.model, (e, out) => {
+    if (e) return res.status(e.status).json(e.body);
+    res.json(out);
+  });
+});
+
+app.post("/seller_verify", async (req, res) => {
+  const url = String(req.body?.url || "").trim();
+  if (!/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ ok: false, error: "body.url must be an http(s) URL of an x402 seller" });
+  }
+  try {
+    const out = await verifySeller(url);
+    res.status(out.ok ? 200 : 422).json(out);
+  } catch (e) {
+    res.status(502).json({ ok: false, error: "verification failed", detail: String(e.message || e).slice(0, 160) });
+  }
+});
+
+// Free sample: the method applied to three sellers whose answers are already known, so a buyer can
+// judge the classifier before paying for it.
+// Warming this at boot keeps the free sample instant: the on-chain walk takes ~18s cold, and a
+// prober that waits that long decides the seller is dead.
+let examplesCache = null;
+async function warmExamples() {
+  const rows = [];
+  for (const t of DEMO_TARGETS) {
+    try {
+      const r = await verifySeller(t.url);
+      rows.push({ label: t.label, url: t.url, verdict: r.verdict, genuineShare: r.genuineShare,
+        settledUsdc: r.settled?.usdc, reason: r.reason });
+    } catch (e) {
+      rows.push({ label: t.label, url: t.url, verdict: "ERROR", reason: String(e.message || e).slice(0, 120) });
+    }
+  }
+  examplesCache = rows;
+  return rows;
+}
+
+app.get("/seller_verify/examples", async (_req, res) => {
+  if (!examplesCache) {
+    return res.json({ ok: true, schema: "af.seller_verify.examples.v1", warming: true,
+      note: "First computation in progress; retry in a few seconds." });
+  }
+  res.json({ ok: true, schema: "af.seller_verify.examples.v1",
+    note: "Free. POST /seller_verify with any seller URL to run the same check on one you care about.",
+    examples: examplesCache });
+});
 
 app.post("/csv_to_json", (req, res) => {
   try { res.json({ ok: true, rows: csvToJson(String(req.body?.csv ?? "")) }); }
@@ -1077,3 +1328,4 @@ for (const name of Object.keys(CONTRACTS)) {
 
 const PORT = process.env.PORT || 12000;
 app.listen(PORT, () => console.log("AF cashier on :" + PORT + " payTo=" + PAY_TO + " price=" + PRICE));
+warmExamples().then((r) => console.log("[seller_verify] examples warmed:", r.map((x) => x.verdict).join(","))).catch((e) => console.log("[seller_verify] warm failed:", String(e).slice(0, 120)));
