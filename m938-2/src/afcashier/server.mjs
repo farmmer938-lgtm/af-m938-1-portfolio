@@ -1236,6 +1236,19 @@ app.post("/llm", (req, res) => {
   });
 });
 
+app.get("/seller_verify", async (req, res) => {
+  const url = String(req.query.url ?? DEMO_TARGETS[0].url).trim();
+  if (!/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ ok: false, error: "?url= must be an http(s) URL of an x402 seller" });
+  }
+  try {
+    const out = await verifySeller(url);
+    res.status(out.ok ? 200 : 422).json(out);
+  } catch (e) {
+    res.status(502).json({ ok: false, error: "verification failed", detail: String(e.message || e).slice(0, 160) });
+  }
+});
+
 app.post("/seller_verify", async (req, res) => {
   const url = String(req.body?.url || "").trim();
   if (!/^https?:\/\//i.test(url)) {
@@ -1277,6 +1290,55 @@ app.get("/seller_verify/examples", async (_req, res) => {
   res.json({ ok: true, schema: "af.seller_verify.examples.v1",
     note: "Free. POST /seller_verify with any seller URL to run the same check on one you care about.",
     examples: examplesCache });
+});
+
+// GET twins of the five tool endpoints. Each was declared payable on GET in the paywall, so a
+// catalogue that recorded the probed verb could sell it, but no handler existed: a settled GET
+// was answered with "Cannot GET" after the money moved. A paid GET must always return a real
+// result, so each falls back to the example its discovery entry advertises.
+const SAMPLE_CSV = "name,age,active\nada,36,true\nlin,41,false";
+const SAMPLE_KPIS = [
+  { name: "uptime", value: 99.5, target: 100, weight: 2, direction: "higher" },
+  { name: "latency", value: 140, target: 100, weight: 1, direction: "lower" },
+];
+const SAMPLE_AUDIT_CSV = "id,email,amount\n1,a@b.co,10\n2,,12\n2,,12\n3,c@d.co, 8 ";
+const SAMPLE_CHECK_URL = "https://api.sitecheck-api.workers.dev/api/dns";
+
+app.get("/csv_to_json", (req, res) => {
+  try { res.json({ ok: true, rows: csvToJson(String(req.query.csv ?? SAMPLE_CSV)),
+    ...(req.query.csv === undefined ? { note: "no ?csv= given, returned the example conversion" } : {}) }); }
+  catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
+});
+
+app.get("/csv_to_sql", (req, res) => {
+  try {
+    res.json({ ok: true, sql: csvToSql(String(req.query.csv ?? SAMPLE_CSV), {
+      dialect: req.query.dialect, table: req.query.table, delimiter: req.query.delimiter }) });
+  } catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
+});
+
+app.get("/kpi_score", (req, res) => {
+  let metrics = SAMPLE_KPIS;
+  if (typeof req.query.metrics === "string") {
+    try { metrics = JSON.parse(req.query.metrics); } catch { /* keep sample */ }
+  }
+  try { res.json({ ok: true, score: score(metrics) }); }
+  catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
+});
+
+app.get("/x402_check", async (req, res) => {
+  try {
+    const r = await checkEndpoint(String(req.query.url ?? SAMPLE_CHECK_URL),
+      { method: req.query.method, body: null });
+    res.json(r);
+  } catch (e) { res.status(502).json({ ok: false, error: String(e.message || e) }); }
+});
+
+app.get("/audit", (req, res) => {
+  try {
+    const csv = String(req.query.csv ?? SAMPLE_AUDIT_CSV);
+    res.json({ ok: true, input: "csv", report: auditCsv(csv, { delimiter: req.query.delimiter }) });
+  } catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
 });
 
 app.post("/csv_to_json", (req, res) => {
