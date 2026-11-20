@@ -97,6 +97,9 @@ else
 fi
 
 # 4. x402 cashier (the money intake). run.sh is idempotent; the loop supervises it.
+#    /llm shells out to llm_bridge.py, so g4f must exist or every paid inference call
+#    fails with an empty 200. Site-packages does not survive a restart: install here.
+python3 -c "import g4f" 2>/dev/null || pip install -q g4f >/dev/null 2>&1
 if ! is_running "node server.mjs"; then
   bash "$SRC/afcashier/run.sh" >>/workspace/.afcashier.log 2>&1
   log "started cashier"

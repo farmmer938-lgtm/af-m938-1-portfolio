@@ -17,7 +17,24 @@ MAX_CHARS = 12_000
 TIMEOUT = 55
 
 
+def _ensure_g4f() -> None:
+    """Install g4f on demand: the sandbox drops site-packages on every restart."""
+    try:
+        import g4f  # noqa: F401
+        return
+    except ModuleNotFoundError:
+        pass
+    import subprocess
+
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-q", "--no-input", "g4f"],
+        check=True,
+        timeout=240,
+    )
+
+
 async def run(messages: list[dict], model: str | None) -> dict:
+    _ensure_g4f()
     import g4f
     from g4f.client import AsyncClient
 

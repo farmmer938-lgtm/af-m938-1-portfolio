@@ -272,6 +272,15 @@ app.post("/trial/audit", (req, res) => {
 const LLM_BRIDGE = path.join(path.dirname(fileURLToPath(import.meta.url)), "llm_bridge.py");
 const LLM_TRIAL_MAX_CHARS = Number(process.env.AF_LLM_TRIAL_MAX_CHARS || 2000);
 
+function normalizeMessages(body) {
+  if (!body || typeof body !== "object") return null;
+  const candidates = [body.messages, body.body?.messages, body.input?.messages, body.input?.body?.messages];
+  for (const c of candidates) if (Array.isArray(c) && c.length) return c;
+  const text = body.prompt ?? body.input ?? body.body?.prompt;
+  if (typeof text === "string" && text.trim()) return [{ role: "user", content: text }];
+  return null;
+}
+
 function runLlm(messages, model, cb) {
   const payload = JSON.stringify({ messages, model });
   const child = spawn("python3", [LLM_BRIDGE], { stdio: ["pipe", "pipe", "pipe"] });
@@ -291,9 +300,9 @@ function runLlm(messages, model, cb) {
 }
 
 app.post("/llm/trial", (req, res) => {
-  const messages = req.body?.messages;
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return res.status(400).json({ ok: false, error: "body.messages must be a non-empty array" });
+  const messages = normalizeMessages(req.body);
+  if (!messages) {
+    return res.status(400).json({ ok: false, error: "send {messages:[{role,content}]} (or {prompt:'...'})" });
   }
   const chars = messages.reduce((n, m) => n + String(m?.content ?? "").length, 0);
   if (chars > LLM_TRIAL_MAX_CHARS) {
@@ -765,16 +774,6 @@ app.get("/openapi.json", (_req, res) => res.json({
       },
     },
     "/csv_to_json": {
-      get: {
-        operationId: "csv_to_json_contract",
-        summary: "Machine-readable contract for /csv_to_json (what to POST, what you get back)",
-        tags: ["Discovery"],
-        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.05" }, protocols: [{ x402: {} }] },
-        responses: {
-          200: { description: "Contract: method, body example, output example, price, network", content: { "application/json": { schema: { type: "object" } } } },
-          402: { description: "Payment Required" },
-        },
-      },
       post: {
         operationId: "csv_to_json",
         summary: "Convert CSV text to typed JSON",
@@ -800,16 +799,6 @@ app.get("/openapi.json", (_req, res) => res.json({
       },
     },
     "/kpi_score": {
-      get: {
-        operationId: "kpi_score_contract",
-        summary: "Machine-readable contract for /kpi_score (what to POST, what you get back)",
-        tags: ["Discovery"],
-        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.05" }, protocols: [{ x402: {} }] },
-        responses: {
-          200: { description: "Contract: method, body example, output example, price, network", content: { "application/json": { schema: { type: "object" } } } },
-          402: { description: "Payment Required" },
-        },
-      },
       post: {
         operationId: "kpi_score",
         summary: "Score weighted KPIs to 0..1",
@@ -839,16 +828,6 @@ app.get("/openapi.json", (_req, res) => res.json({
       },
     },
     "/csv_to_sql": {
-      get: {
-        operationId: "csv_to_sql_contract",
-        summary: "Machine-readable contract for /csv_to_sql (what to POST, what you get back)",
-        tags: ["Discovery"],
-        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.08" }, protocols: [{ x402: {} }] },
-        responses: {
-          200: { description: "Contract: method, body example, output example, price, network", content: { "application/json": { schema: { type: "object" } } } },
-          402: { description: "Payment Required" },
-        },
-      },
       post: {
         operationId: "csv_to_sql",
         summary: "Convert CSV text to runnable SQL (DDL + INSERT)",
@@ -876,16 +855,6 @@ app.get("/openapi.json", (_req, res) => res.json({
       },
     },
     "/x402_check": {
-      get: {
-        operationId: "x402_check_contract",
-        summary: "Machine-readable contract for /x402_check (what to POST, what you get back)",
-        tags: ["Discovery"],
-        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.08" }, protocols: [{ x402: {} }] },
-        responses: {
-          200: { description: "Contract: method, body example, output example, price, network", content: { "application/json": { schema: { type: "object" } } } },
-          402: { description: "Payment Required" },
-        },
-      },
       post: {
         operationId: "x402_check",
         summary: "Check an endpoint answers with a well-formed x402 402 challenge",
@@ -950,16 +919,6 @@ app.get("/openapi.json", (_req, res) => res.json({
       },
     },
     "/seller_verify": {
-      get: {
-        operationId: "seller_verify_contract",
-        summary: "Machine-readable contract for /seller_verify (what to POST, what you get back)",
-        tags: ["Discovery"],
-        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "1" }, protocols: [{ x402: {} }] },
-        responses: {
-          200: { description: "Contract: body example, output example, price, network", content: { "application/json": { schema: { type: "object" } } } },
-          402: { description: "Payment Required" },
-        },
-      },
       post: {
         operationId: "seller_verify",
         summary: "Verify whether an x402 seller's demand is real money or self-paid volume (on-chain)",
@@ -987,16 +946,6 @@ app.get("/openapi.json", (_req, res) => res.json({
       },
     },
     "/audit": {
-      get: {
-        operationId: "audit_contract",
-        summary: "Machine-readable contract for /audit (what to POST, what you get back)",
-        tags: ["Discovery"],
-        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "49" }, protocols: [{ x402: {} }] },
-        responses: {
-          200: { description: "Contract: method, body example, output example, price, network", content: { "application/json": { schema: { type: "object" } } } },
-          402: { description: "Payment Required" },
-        },
-      },
       post: {
         operationId: "audit",
         summary: "Data-quality audit of CSV or JSON (hero product)",
@@ -1187,9 +1136,9 @@ app.get("/x402/leaderboard", (_req, res) => {
 // not silently return 200 — it returns 502 with the provider error so the caller can retry
 // or dispute, and the receipt still proves what they paid for.
 app.post("/llm", (req, res) => {
-  const messages = req.body?.messages;
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return res.status(400).json({ ok: false, error: "body.messages must be a non-empty array" });
+  const messages = normalizeMessages(req.body);
+  if (!messages) {
+    return res.status(400).json({ ok: false, error: "send {messages:[{role,content}]} (or {prompt:'...'})" });
   }
   runLlm(messages, req.body?.model, (e, out) => {
     if (e) return res.status(e.status).json(e.body);
