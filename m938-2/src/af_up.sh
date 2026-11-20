@@ -148,6 +148,14 @@ if [ -f "$XREG" ]; then
   python3 "$XREG" >>/workspace/.x402scan-register.log 2>&1 && log "x402scan registered" || log "x402scan register skipped"
 fi
 
+# 7d. Same for the 402index directory (50k paid endpoints; agents search it before they
+#     pay). A listing pins the ephemeral host, so every boot must re-list or the entry
+#     points at a dead URL and the product becomes unfindable.
+IREG=/workspace/project/AX_MASTER_BRAIN/tools/af_402index_register.py
+if [ -f "$IREG" ]; then
+  python3 "$IREG" >>/workspace/.402index-register.log 2>&1 && log "402index registered" || log "402index register skipped"
+fi
+
 # 6. Browser autologin: once noVNC/chromium is up, log into sites the owner saved
 #    once in the persistent profile. Chrome's own password manager fills the form
 #    and AF clicks submit, so a restart no longer means "wait for K to log in".

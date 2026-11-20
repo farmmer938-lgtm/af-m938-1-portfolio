@@ -317,7 +317,28 @@ app.use(paymentMiddleware({
     tags: ["llm", "ai", "chat", "inference", "openai-compatible", "completion"],
     extensions: declareDiscoveryExtension({
       method: "POST",
-      input: { body: { messages: [{ role: "user", content: "What is 17*23? Reply with the number only." }] } },
+      bodyType: "json",
+      input: { messages: [{ role: "user", content: "What is 17*23? Reply with the number only." }] },
+      inputSchema: {
+        type: "object",
+        required: ["messages"],
+        properties: {
+          messages: {
+            type: "array",
+            description: "OpenAI chat messages, oldest first",
+            items: {
+              type: "object",
+              required: ["role", "content"],
+              properties: {
+                role: { type: "string", enum: ["system", "user", "assistant"] },
+                content: { type: "string" },
+              },
+            },
+          },
+          temperature: { type: "number", description: "Sampling temperature, 0-2" },
+          max_tokens: { type: "integer", description: "Upper bound on reply length" },
+        },
+      },
       output: { example: { ok: true, model: "yqcloud", choices: [{ message: { role: "assistant", content: "391" } }] } },
     }),
   },
