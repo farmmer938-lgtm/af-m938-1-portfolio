@@ -66,6 +66,10 @@ const strip = (it) => {
   return rest;
 };
 
+export function museCount() {
+  return loadMuse().loaded;
+}
+
 export function registerMuse(app, { acceptsFor, PUBLIC, demandLog }) {
   const M = loadMuse();
   if (!M.loaded) {
