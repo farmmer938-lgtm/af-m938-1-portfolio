@@ -1353,6 +1353,14 @@ app.get("/.well-known/x402", (_req, res) => {
        "AF Art Studio Android app (APK): 12 phone themes offline, one-tap wallpaper set."],
       [`${PUBLIC}/art/stickers/{slug}/{file}`, STICKER_PRICE,
        "Transparent 512px PNG sticker (real alpha channel) cut from an original artwork."],
+      // Creative text. A crawler that reads only this document must still find the corpus,
+      // so the pieces are listed here as well as in /openapi.json.
+      [`${PUBLIC}/muse/piece/{id}`, "0.02",
+       "One signed Thai creative piece, full text, with a sha256 over its own body."],
+      [`${PUBLIC}/muse/form/{form}`, "0.15",
+       "Every piece in one form: klon8, haiku, aphorism, caption, song, scene, essay."],
+      [`${PUBLIC}/muse/all`, "0.50",
+       `The whole corpus: all ${museCount()} pieces in one call.`],
     ]) {
       resources.push({ resource: a[0], method: "GET", price: a[1],
                        network: rail.net, payTo: rail.payTo, description: a[2] });
