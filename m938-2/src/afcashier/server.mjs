@@ -29,6 +29,12 @@ const CHECK_PRICE = process.env.AF_CHECK_PRICE || "$0.08";
 // The data-quality audit is the hero SKU (vendor consult 2026-11-13, 4/6 chose it): a
 // deterministic "is this file safe to load?" report, priced at $49 to sell self-serve.
 const AUDIT_PRICE = process.env.AF_AUDIT_PRICE || "$49";
+// The $49 audit is correct for a human buyer and wrong for the only automated buyer that exists.
+// Settled's scout pays at most $0.25 a week per seller, so a $49 listing is never bought. Its
+// purchase log shows audits selling at $0.02-$0.05, so the category has demand at that price and
+// the listing just needs a tier the scout can reach. Same engine, smaller cap.
+const AUDIT_LITE_PRICE = process.env.AF_AUDIT_LITE_PRICE || "$0.25";
+const AUDIT_LITE_MAX_ROWS = Number(process.env.AF_AUDIT_LITE_MAX_ROWS || 2000);
 // Demand forensics: the only product here that checks a claim against settled money rather than
 // against a catalogue's self-reported counters. Priced above the data tools because a buyer uses it
 // to decide whether to spend hundreds of dollars with an unverified seller.
@@ -570,6 +576,27 @@ const ROUTES = {
       output: { example: { ok: true, schema: "af.seller_verify.v1", verdict: "REAL", genuineShare: 1 } },
     }),
   },
+  "POST /audit_lite": {
+    accepts: acceptsFor(AUDIT_LITE_PRICE),
+    resource: `${PUBLIC}/audit_lite`,
+    description: "Data-quality audit, lite tier: the same deterministic report as POST /audit (shape, per-column type consistency, nulls, duplicates, outliers, whitespace, 0-100 score, grade, ready-to-load verdict) for files up to 2000 rows. Priced for agent buyers; use POST /audit for unlimited rows.",
+    mimeType: "application/json",
+    serviceName: "AF DataBridge",
+    tags: ["data", "quality", "audit", "csv", "json", "validation", "etl"],
+    extensions: declareDiscoveryExtension({
+      method: "POST",
+      bodyType: "json",
+      input: { csv: "id,name,score\n1,ann,10\n2,bob,\n2,bob,\n3,N/A,30" },
+      inputSchema: {
+        properties: {
+          csv: { type: "string", description: "CSV text to audit (with a header row), up to 2000 rows. Provide csv OR json." },
+          json: { type: "array", description: "Array of flat JSON objects to audit, up to 2000 rows. Provide csv OR json." },
+          delimiter: { type: "string", description: "Optional explicit delimiter; omit to auto-sniff." },
+        },
+      },
+      output: { example: { ok: true, tier: "lite", report: { schema: "af.data_audit.v1", score: 73, grade: "C", readyToLoad: false, findings: [] } } },
+    }),
+  },
   "POST /audit": {
     accepts: acceptsFor(AUDIT_PRICE),
     resource: `${PUBLIC}/audit`,
@@ -714,7 +741,7 @@ app.get("/demand.json", (_req, res) => {
 
 app.get("/", (_req, res) => res.json({
   name: "AF DataBridge (x402)",
-  tools: { "POST /csv_to_json": PRICE, "POST /kpi_score": PRICE, "POST /csv_to_sql": SQL_PRICE, "POST /x402_check": CHECK_PRICE, "POST /audit": AUDIT_PRICE },
+  tools: { "POST /csv_to_json": PRICE, "POST /kpi_score": PRICE, "POST /csv_to_sql": SQL_PRICE, "POST /x402_check": CHECK_PRICE, "POST /audit": AUDIT_PRICE, "POST /audit_lite": AUDIT_LITE_PRICE },
   hero: { "POST /audit": `data-quality audit (${AUDIT_PRICE}) — deterministic report + 0-100 score + ready-to-load verdict` },
   try_free: {
     note: "First call is FREE and needs no payment — try before you pay.",
@@ -998,6 +1025,36 @@ app.get("/openapi.json", (_req, res) => res.json({
         },
       },
     },
+    "/audit_lite": {
+      post: {
+        operationId: "audit_lite",
+        summary: "Data-quality audit of CSV or JSON, lite tier (up to 2000 rows)",
+        tags: ["Data", "Quality"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.25" }, protocols: [{ x402: {} }] },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: {
+            type: "object",
+            properties: {
+              csv: { type: "string" },
+              json: { type: "array", items: { type: "object" } },
+              delimiter: { type: "string" },
+            },
+          } } },
+        },
+        responses: {
+          200: { description: "Audit report", content: { "application/json": { schema: {
+            type: "object",
+            properties: {
+              ok: { type: "boolean" },
+              tier: { type: "string" },
+              report: { type: "object" },
+            }, required: ["ok", "report"],
+          } } } },
+          402: { description: "Payment Required" },
+        },
+      },
+    },
     "/audit": {
       post: {
         operationId: "audit",
@@ -1044,6 +1101,7 @@ app.get("/.well-known/x402", (_req, res) => {
                    ["csv_to_sql", "Convert CSV text to runnable SQL (postgres/mysql/sqlite).", SQL_PRICE],
                    ["x402_check", "Check an endpoint answers with a well-formed x402 402 challenge.", CHECK_PRICE],
                    ["audit", "Data-quality audit of CSV/JSON: score, grade, ready-to-load verdict, per-column findings.", AUDIT_PRICE],
+                   ["audit_lite", "Data-quality audit, lite tier (up to 2000 rows) at the agent-buyer price. Same engine and report as /audit.", AUDIT_LITE_PRICE],
                    ["llm", "OpenAI-compatible chat completion. Send {messages:[...]}, get {choices:[...]} back. No account, no API key.", LLM_PRICE],
                    ["seller_verify", "Chain-truth revenue verification for an x402 seller URL: settled vs self-paid vs negligible, with evidence.", VERIFY_PRICE]]) {
     for (const rail of rails) {
@@ -1363,6 +1421,28 @@ app.post("/x402_check", async (req, res) => {
     res.status(r.ok ? 200 : 400).json(r);
   } catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
 });
+app.post("/audit_lite", (req, res) => {
+  try {
+    const body = req.body || {};
+    let report, input;
+    if (body.json !== undefined && body.json !== null) {
+      const arr = Array.isArray(body.json) ? body.json : [body.json];
+      if (arr.length > AUDIT_LITE_MAX_ROWS) {
+        return res.status(400).json({ ok: false, error: `audit_lite caps at ${AUDIT_LITE_MAX_ROWS} rows; POST /audit has no limit`, upgrade: upgrade("audit", AUDIT_PRICE) });
+      }
+      report = auditJson(body.json); input = "json";
+    } else {
+      const csv = String(body.csv ?? "");
+      if (!csv) return res.status(400).json({ ok: false, error: "provide csv (string) or json (array)" });
+      if (csv.split(/\r?\n/).filter((l) => l.trim()).length > AUDIT_LITE_MAX_ROWS) {
+        return res.status(400).json({ ok: false, error: `audit_lite caps at ${AUDIT_LITE_MAX_ROWS} rows; POST /audit has no limit`, upgrade: upgrade("audit", AUDIT_PRICE) });
+      }
+      report = auditCsv(csv, { delimiter: body.delimiter }); input = "csv";
+    }
+    res.json({ ok: true, input, tier: "lite", report });
+  } catch (e) { res.status(400).json({ ok: false, error: String(e.message || e) }); }
+});
+
 app.post("/audit", (req, res) => {
   try {
     const body = req.body || {};
