@@ -736,6 +736,19 @@ const MUSE = registerMuse(app, {
 });
 Object.assign(ROUTES, MUSE.routes);
 
+// Must run BEFORE the payment middleware: once a route is charged for, the money has moved and
+// a 503 afterwards is a paid failure. Refusing here means the buyer is never asked to pay.
+app.use((req, res, next) => {
+  const isLlm = /^\/llm(\/|$)/.test(req.path) && !/^\/llm\/trial/.test(req.path);
+  if (isLlm && !llmReady.ok) {
+    return res.status(503).json({
+      ok: false, error: "llm unavailable - not charged", detail: llmReady.detail,
+      note: "This endpoint is withdrawn while no provider answers, so no payment is requested.",
+    });
+  }
+  next();
+});
+
 app.use(paymentMiddleware(ROUTES, resourceServer));
 
 app.get("/muse/piece/:id", MUSE.handlers.paidPiece);
@@ -939,8 +952,8 @@ app.get("/favicon.ico", (_req, res) => {
 
 // OpenAPI is the canonical discovery contract x402scan/agents read. Served from the
 // public origin so a registration probe resolves the same document buyers will fetch.
-app.get("/openapi.json", (_req, res) => res.json({
-  openapi: "3.1.0",
+app.get("/openapi.json", (_req, res) => {
+  const doc = { openapi: "3.1.0",
   info: {
     title: "AF DataBridge",
     version: "1.0.0",
@@ -1332,7 +1345,10 @@ app.get("/openapi.json", (_req, res) => res.json({
       },
     },
   },
-}));
+  };
+  if (!llmReady.ok) delete doc.paths["/llm"];
+  res.json(doc);
+});
 // x402 discovery manifest. Indexers (x402scan, Bazaar crawlers) probe this well-known
 // path to enumerate a host's paid resources without guessing endpoints.
 app.get("/.well-known/x402", (_req, res) => {
@@ -1347,6 +1363,9 @@ app.get("/.well-known/x402", (_req, res) => {
                    ["audit_lite", "Data-quality audit, lite tier (up to 2000 rows) at the agent-buyer price. Same engine and report as /audit.", AUDIT_LITE_PRICE],
                    ["llm", "OpenAI-compatible chat completion. Send {messages:[...]}, get {choices:[...]} back. No account, no API key.", LLM_PRICE],
                    ["seller_verify", "Chain-truth revenue verification for an x402 seller URL: settled vs self-paid vs negligible, with evidence.", VERIFY_PRICE]]) {
+    // Never advertise a route a buyer cannot successfully call. /llm comes back on its own
+    // once the probe succeeds.
+    if (r[0] === "llm" && !llmReady.ok) continue;
     for (const rail of rails) {
       resources.push({ resource: `${PUBLIC}/${r[0]}`, method: "POST",
                        price: ROUTES[`POST /${r[0]}`]?.accepts?.[0]?.price ?? r[2],
@@ -1780,4 +1799,26 @@ for (const name of Object.keys(CONTRACTS)) {
 
 const PORT = process.env.PORT || 12000;
 app.listen(PORT, () => console.log("AF cashier on :" + PORT + " payTo=" + PAY_TO + " price=" + PRICE));
+
+// Fail closed on /llm: if no provider will actually answer, a buyer would pay $0.01 and get a
+// 502. Probe once at boot and, when it fails, withdraw the route from the paid table so no
+// payment is ever requested for a call that cannot be served. /llm then answers 503 for free
+// and discovery stops advertising it. Re-checked every 15 minutes so it returns on its own.
+const llmReady = { ok: false, checkedAt: null, detail: "not probed yet" };
+function probeLlm() {
+  runLlm([{ role: "user", content: "Reply with exactly: OK" }], null, (e, out) => {
+    llmReady.checkedAt = new Date().toISOString();
+    if (e || !out?.ok) {
+      const was = llmReady.ok;
+      llmReady.ok = false;
+      llmReady.detail = (e?.body?.detail || e?.body?.error || "no completion").toString().slice(0, 200);
+      if (was) console.log("[llm] withdrawn from paid routes:", llmReady.detail);
+    } else {
+      llmReady.ok = true;
+      llmReady.detail = String(out.model || "ok");
+    }
+  });
+}
+probeLlm();
+setInterval(probeLlm, 15 * 60 * 1000).unref?.();
 warmExamples().then((r) => console.log("[seller_verify] examples warmed:", r.map((x) => x.verdict).join(","))).catch((e) => console.log("[seller_verify] warm failed:", String(e).slice(0, 120)));
