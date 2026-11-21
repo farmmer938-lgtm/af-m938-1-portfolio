@@ -793,7 +793,29 @@ app.get("/demand.json", (_req, res) => {
       + "external_hits as a weak hint and payment_attempts as the real test of demand.",
     ...summary,
     payment_attempts: payAttempts,
-    demand_verdict: payAttempts > 0 ? "PAYMENT ATTEMPTED (real demand)" : "NO PAYMENT ATTEMPT (demand unproven)",
+    // A payment attempt is not demand. AF's own verifier and the platform's scout both send
+    // PAYMENT-SIGNATURE, and a self-paid receipt proves the rail works, not that anyone wants
+    // the goods. Count only attempts from a user-agent that is neither, and report the probes
+    // separately so the number cannot be read as a customer.
+    ...(() => {
+      // Every attempt so far is one of three things, none of them a customer: the platform's
+      // scout, AF's own verifier, or a local curl/python-requests test. Name all three so a
+      // self-test cannot be read back as demand.
+      const PROBE = /scout|verif|monitor|probe|curl|python-requests|wget|httpie|af-self/i;
+      const probe = rows.filter((r) => r.pay && PROBE.test(String(r.ua || ""))).length;
+      const selfPaid = readReceipts(1000).filter((r) => String(r.payer || "").toLowerCase()
+        === String(r.payTo || "").toLowerCase()).length;
+      const buyer = payAttempts - probe;
+      return {
+        probe_attempts: probe,
+        self_paid_receipts: selfPaid,
+        buyer_attempts: Math.max(buyer, 0),
+        demand_verdict: buyer > 0
+          ? "BUYER ATTEMPTED PAYMENT"
+          : (payAttempts > 0 ? "NO BUYER - all attempts were probes or self-paid"
+                             : "NO PAYMENT ATTEMPT (demand unproven)"),
+      };
+    })(),
   });
 });
 
