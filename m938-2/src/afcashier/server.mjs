@@ -18,6 +18,7 @@ import { checkEndpoint } from "./endpointcheck.mjs";
 import { verifySeller, DEMO_TARGETS } from "./sellerverify.mjs";
 import { record, reputation, readReceipts, signerAddress } from "./receipts.mjs";
 import { classifyIp, summarizeDemand } from "./demand.mjs";
+import { registerMuse } from "./muse.mjs";
 
 const PAY_TO = process.env.AF_PAY_TO || "0xf3C99a6d6e7C6b2ae00b44dC42cC3eb7691D7702";
 const PRICE = process.env.AF_PRICE || "$0.05";
@@ -110,7 +111,7 @@ function demandLog(req) {
     }) + "\n");
   } catch { /* logging must never break the response */ }
 }
-const DEMAND_PATHS = /^\/(csv_to_json|kpi_score|csv_to_sql|audit|x402_check|llm|seller_verify|trial\/.*)$/;
+const DEMAND_PATHS = /^\/(csv_to_json|kpi_score|csv_to_sql|audit|x402_check|llm|seller_verify|muse\/(piece|form|all).*|trial\/.*)$/;
 app.use((req, _res, next) => { if (DEMAND_PATHS.test(req.path)) demandLog(req); next(); });
 
 const facilitator = new HTTPFacilitatorClient({ url: "https://facilitator.payai.network" });
@@ -179,6 +180,50 @@ const ART_FREE = /^\/art\/(themes|stickers)\/([a-z0-9-]+)\/(preview\.png|[a-z0-9
 // K's own copy. A token in the path keeps it out of crawlers without an account system;
 // the file set is the same one the paid routes serve, so nothing is duplicated.
 const K_TOKEN = process.env.AF_K_TOKEN || "k-7f3a91c4";
+
+// The creative library. Served from the generated corpus, not from a database: the whole
+// point is that an agent can read the file, verify each piece's sha256 signature offline,
+// and use it without calling AF at all. The HTTP routes exist for convenience and for
+// search, not as a gate.
+// The corpus is authored in the brain repo and mirrored next to the service so the cashier
+// can serve it without reaching outside its own tree. First existing path wins.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const CREATIVE_DIR = [
+  process.env.AF_CREATIVE_DIR,
+  path.join(HERE, "creative_corpus"),
+  path.join(HERE, "..", "creative_corpus"),
+  "/workspace/project/AX_MASTER_BRAIN/artifacts/creative/corpus",
+].filter(Boolean).find((d) => fs.existsSync(path.join(d, "index.json")))
+  || path.join(HERE, "creative_corpus");
+let CREATIVE = { index: null, items: [], byId: new Map() };
+try {
+  const idx = JSON.parse(fs.readFileSync(path.join(CREATIVE_DIR, "index.json"), "utf8"));
+  const items = [];
+  for (const [form, n] of Object.entries(idx.forms || {})) {
+    const f = path.join(CREATIVE_DIR, `${form}.json`);
+    if (!fs.existsSync(f)) continue;
+    const doc = JSON.parse(fs.readFileSync(f, "utf8"));
+    for (const it of doc.items || []) items.push(it);
+  }
+  CREATIVE = { index: idx, items, byId: new Map(items.map((i) => [i.id, i])) };
+  console.log(`[creative] loaded ${items.length} items across ${Object.keys(idx.forms || {}).length} forms`);
+} catch (e) {
+  console.warn("[creative] corpus not loaded:", e.message);
+}
+
+const creativeText = (it) => [
+  it.title, it.hook, it.body, it.thesis, it.logline, it.theme, it.closing_image, it.turn,
+  ...(it.tags || []),
+  ...(it.paragraphs || []),
+  ...(it.lines || []).map((l) => (typeof l === "string" ? l : l.text)),
+  ...(it.beats || []),
+  ...(it.dialogue || []).map((d) => `${d.speaker} ${d.line}`),
+  ...(it.sections || []).flatMap((s) => s.lines),
+].filter(Boolean).join(" ").toLowerCase();
+
+// Build the searchable text once at boot rather than on every request.
+for (const it of CREATIVE.items) it._t = creativeText(it);
+
 app.get("/k/:token/art/themes/:slug/:name", (req, res) => {
   if (req.params.token !== K_TOKEN) return res.status(404).json({ error: "not found" });
   const f = artFile("themes", req.params.slug, req.params.name);
@@ -682,7 +727,20 @@ for (const name of GET_TWINS) {
   };
 }
 
+// AF_MUSE paid library. Routes are merged into the same table so one middleware serves the
+// whole shop; handlers mount after it, so they only run once x402 has settled.
+const MUSE = registerMuse(app, {
+  acceptsFor,
+  PUBLIC,
+  demandLog: (req) => { try { demandLog(req); } catch { /* logging must not break a sale */ } },
+});
+Object.assign(ROUTES, MUSE.routes);
+
 app.use(paymentMiddleware(ROUTES, resourceServer));
+
+app.get("/muse/piece/:id", MUSE.handlers.paidPiece);
+app.get("/muse/form/:form", MUSE.handlers.paidForm);
+app.get("/muse/all", MUSE.handlers.paidAll);
 
 // Receipts are signed in the settlement hook: funds have already moved on-chain, so a
 // failure here is logged, never thrown (it must not fail a settled payment).
@@ -736,6 +794,99 @@ app.get("/demand.json", (_req, res) => {
     ...summary,
     payment_attempts: payAttempts,
     demand_verdict: payAttempts > 0 ? "PAYMENT ATTEMPTED (real demand)" : "NO PAYMENT ATTEMPT (demand unproven)",
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Creative library. Free to browse, search and read. The licence is CC0: an agent may take
+// any piece and use it without attribution and without paying. That is deliberate - the
+// library's job is to be used, and a corpus nobody can afford to read is a corpus nobody
+// uses. The paid route composes something new instead of serving something existing.
+// ---------------------------------------------------------------------------------------
+const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "\u2026" : s);
+
+app.get("/creative", (req, res) => {
+  const { q, form, mood, tag, limit = "25", offset = "0" } = req.query;
+  let rows = CREATIVE.items;
+  if (form) rows = rows.filter((i) => i.form === form);
+  if (mood) rows = rows.filter((i) => i.mood === mood);
+  if (tag) rows = rows.filter((i) => (i.tags || []).includes(String(tag)));
+  if (q) {
+    const terms = String(q).toLowerCase().split(/\s+/).filter(Boolean);
+    rows = rows.filter((i) => terms.every((t) => i._t.includes(t)));
+  }
+  const total = rows.length;
+  const off = Math.max(0, Number(offset) || 0);
+  const lim = Math.min(Math.max(1, Number(limit) || 25), 100);
+  const page = rows.slice(off, off + lim).map((i) => ({
+    id: i.id, form: i.form, form_th: i.form_th, title: i.title,
+    preview: clip(i.hook || i.thesis || i.logline || i.lines?.[0]?.text || i.paragraphs?.[0] || "", 140),
+    mood: i.mood, tags: i.tags,
+    url: `/creative/${i.id}`,
+  }));
+  res.json({
+    total, offset: off, limit: lim, returned: page.length,
+    forms: CREATIVE.index?.forms || {},
+    license: CREATIVE.index?.license,
+    author: CREATIVE.index?.author,
+    items: page,
+  });
+});
+
+app.get("/creative/index.json", (_req, res) => {
+  if (!CREATIVE.index) return res.status(503).json({ error: "corpus not loaded" });
+  res.json(CREATIVE.index);
+});
+
+app.get("/creative/random", (req, res) => {
+  let rows = CREATIVE.items;
+  if (req.query.form) rows = rows.filter((i) => i.form === req.query.form);
+  if (!rows.length) return res.status(404).json({ error: "no items" });
+  const it = rows[Math.floor(Math.random() * rows.length)];
+  const firstLine = it.lines?.[0]?.text || it.hook || it.thesis || it.paragraphs?.[0] || "";
+  res.json({
+    id: it.id, form: it.form, title: it.title, tags: it.tags,
+    preview: String(firstLine).slice(0, 140), truncated: true,
+    buy_url: `/muse/piece/${it.id}`,
+  });
+});
+
+// RETIRED: this route used to serve the full text of every piece for free, which is the same
+// product now sold at /muse/piece/:id. Leaving it open would make the paywall decorative. It
+// now returns a preview and says where the paid version is.
+app.get("/creative/:id", (req, res) => {
+  const it = CREATIVE.byId.get(req.params.id);
+  if (!it) {
+    return res.status(404).json({
+      error: "not found",
+      hint: "list ids at /creative or /creative/index.json",
+    });
+  }
+  const firstLine = it.lines?.[0]?.text || it.hook || it.thesis || it.paragraphs?.[0] || "";
+  res.json({
+    id: it.id, form: it.form, title: it.title, tags: it.tags,
+    preview: String(firstLine).slice(0, 140),
+    truncated: true,
+    retired: true,
+    note: "full text is no longer served free here; it is sold per piece",
+    buy_url: `/muse/piece/${it.id}`,
+    price: process.env.AF_MUSE_PIECE_PRICE || "$0.02",
+  });
+});
+
+app.get("/creative/verify/:id", (req, res) => {
+  const it = CREATIVE.byId.get(req.params.id);
+  if (!it) return res.status(404).json({ error: "not found" });
+  const { _t, ...rest } = it;
+  res.json({
+    id: it.id,
+    algorithm: it.signature?.algorithm,
+    expected: it.signature?.digest,
+    how_to_check: "sha256 over json.dumps({all fields except signature}, sort_keys=True, "
+      + "ensure_ascii=False, separators=(',',':')) - see tools/af_creative_corpus.py:canonical()",
+    signed_by: it.signature?.by,
+    note: "This endpoint restates the digest. To actually verify, recompute it yourself from "
+      + "the item body; trusting this response would defeat the point.",
   });
 });
 
