@@ -47,6 +47,17 @@ async def run(messages: list[dict], model: str | None) -> dict:
         if p is not None and p not in providers:
             providers.append(p)
 
+    # A paid call must never return a provider's own error page as if it were an answer.
+    # Yqcloud answers a blocked IP with a Chinese "your IP is banned" notice and a chat-app
+    # advert, which is non-empty and so passed the old `if text:` check. A buyer paid for a
+    # completion and got an ad. Reject it and try the next provider instead.
+    def unusable(t: str) -> bool:
+        low = t.lower()
+        return any(k in low for k in (
+            "ip已由于触发防滥用", "被封禁", "请关闭代理", "aichatos8", "自助购买key",
+            "not available in your", "blocked in your region", "banned", "captcha",
+            "invalid api key", "rate limit exceeded"))
+
     last = None
     for prov in providers:
         for attempt in range(2):
@@ -56,6 +67,9 @@ async def run(messages: list[dict], model: str | None) -> dict:
                     client.chat.completions.create(model=model or "", messages=messages, provider=prov),
                     timeout=TIMEOUT)
                 text = (r.choices[0].message.content or "").strip()
+                if text and unusable(text):
+                    last = f"{getattr(prov, '__name__', prov)}: provider error text, not an answer"
+                    continue
                 if text:
                     return {"ok": True, "model": getattr(prov, "__name__", str(prov)),
                             "choices": [{"index": 0, "message": {"role": "assistant", "content": text},
