@@ -18,7 +18,7 @@ import { checkEndpoint } from "./endpointcheck.mjs";
 import { verifySeller, DEMO_TARGETS } from "./sellerverify.mjs";
 import { record, reputation, readReceipts, signerAddress } from "./receipts.mjs";
 import { classifyIp, summarizeDemand } from "./demand.mjs";
-import { registerMuse } from "./muse.mjs";
+import { registerMuse, museCount } from "./muse.mjs";
 
 const PAY_TO = process.env.AF_PAY_TO || "0xf3C99a6d6e7C6b2ae00b44dC42cC3eb7691D7702";
 const PRICE = process.env.AF_PRICE || "$0.05";
@@ -927,6 +927,76 @@ app.get("/openapi.json", (_req, res) => res.json({
     contact: { email: "farmmer938@gmail.com" },
   },
   paths: {
+    // AF_MUSE is registered here because this document, not the marketing page, is what
+    // x402scan and agent crawlers actually read. A route that is not in here is invisible to
+    // every buyer that discovers by machine, which is the whole market.
+    "/muse": {
+      get: {
+        operationId: "muse_browse",
+        summary: `Browse AF_MUSE: ${museCount()} signed Thai creative pieces (poetry, lyrics, screenplay scenes, aphorisms, captions, essays) - free`,
+        tags: ["Creative"],
+        parameters: [
+          { name: "form", in: "query", required: false, schema: { type: "string",
+            enum: ["klon8", "haiku", "aphorism", "caption", "song", "scene", "essay"] } },
+          { name: "limit", in: "query", required: false, schema: { type: "integer", default: 20 } },
+        ],
+        responses: { "200": { description: "Titles, tags, previews and prices. Free, no payment." } },
+      },
+    },
+    "/muse/preview/{id}": {
+      get: {
+        operationId: "muse_preview",
+        summary: "First 120 characters of one piece plus its sha256 and buy URL - free",
+        tags: ["Creative"],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", example: "klon8-01" } }],
+        responses: { "200": { description: "Truncated text, digest, price, buy_url." } },
+      },
+    },
+    "/muse/piece/{id}": {
+      get: {
+        operationId: "muse_piece",
+        summary: "Full text of one piece, signed with sha256 over its own body",
+        tags: ["Creative"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.02" }, protocols: [{ x402: {} }] },
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", example: "klon8-01" } }],
+        responses: { "200": { description: "The piece with signature.digest for tamper detection.",
+          content: { "application/json": { schema: { type: "object" } } } },
+          "402": { description: "Payment Required" } },
+      },
+    },
+    "/muse/form/{form}": {
+      get: {
+        operationId: "muse_form",
+        summary: "Every piece in one form (klon8, haiku, aphorism, caption, song, scene, essay)",
+        tags: ["Creative"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.15" }, protocols: [{ x402: {} }] },
+        parameters: [{ name: "form", in: "path", required: true, schema: { type: "string",
+          enum: ["klon8", "haiku", "aphorism", "caption", "song", "scene", "essay"] } }],
+        responses: { "200": { description: "All pieces in the form, each signed.",
+          content: { "application/json": { schema: { type: "object" } } } },
+          "402": { description: "Payment Required" } },
+      },
+    },
+    "/muse/all": {
+      get: {
+        operationId: "muse_all",
+        summary: `The whole corpus: all ${museCount()} pieces in one call`,
+        tags: ["Creative"],
+        "x-payment-info": { price: { mode: "fixed", currency: "USD", amount: "0.50" }, protocols: [{ x402: {} }] },
+        // The registry rejects a route with no input schema ("Missing input schema"), so the
+        // free-form options are declared even though every field is optional.
+        parameters: [
+          { name: "form", in: "query", required: false, schema: { type: "string",
+            description: "restrict to one form; omit for the whole corpus",
+            enum: ["klon8", "haiku", "aphorism", "caption", "song", "scene", "essay"] } },
+          { name: "include_signatures", in: "query", required: false,
+            schema: { type: "boolean", default: true } },
+        ],
+        responses: { "200": { description: "Every piece, every form, each signed.",
+          content: { "application/json": { schema: { type: "object" } } } },
+          "402": { description: "Payment Required" } },
+      },
+    },
     "/art/themes/{slug}/{file}": {
       get: {
         operationId: "art_theme_file",
