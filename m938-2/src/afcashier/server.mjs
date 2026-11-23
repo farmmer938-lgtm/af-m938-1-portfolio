@@ -1410,6 +1410,44 @@ app.get("/.well-known/x402", (_req, res) => {
   res.json({ x402Version: 1, resources, openapi: `${PUBLIC}/openapi.json`,
              contact: "farmmer938@gmail.com" });
 });
+// A2A-style agent manifest. Directory crawlers and agent frameworks look for this exact
+// path; /.well-known/x402 alone is only found by x402-specific indexers.
+app.get("/.well-known/agent.json", (_req, res) => res.json({
+  name: "AF DataBridge",
+  description: "Pay-per-call data + token-risk tools for autonomous agents. No account, no API key: pay per request over x402 (Base USDC).",
+  url: PUBLIC,
+  version: "1.0.0",
+  protocolVersion: "0.2.5",
+  capabilities: { streaming: false, pushNotifications: false, stateTransitionHistory: false },
+  defaultInputModes: ["application/json", "text/csv"],
+  defaultOutputModes: ["application/json"],
+  skills: [
+    ["audit", AUDIT_PRICE, "Data-quality audit of CSV/JSON: 0-100 score, grade, ready-to-load verdict, per-column findings."],
+    ["audit_lite", AUDIT_LITE_PRICE, "Same audit engine, capped at 2000 rows, at the agent-buyer price point."],
+    ["csv_to_json", PRICE, "Convert CSV text to typed JSON."],
+    ["kpi_score", PRICE, "Score weighted KPIs to 0..1."],
+    ["csv_to_sql", SQL_PRICE, "Convert CSV text to runnable SQL (postgres/mysql/sqlite)."],
+    ["x402_check", CHECK_PRICE, "Verify an endpoint returns a well-formed x402 402 challenge."],
+    ["seller_verify", VERIFY_PRICE, "Chain-truth revenue verification for an x402 seller: settled vs self-paid vs negligible."],
+    ["llm", LLM_PRICE, "OpenAI-compatible chat completion, no account."],
+  ].filter((s) => s[0] !== "llm" || llmReady.ok).map(([id, price, description]) => ({
+    id, name: id, description, price, currency: "USDC", network: NET,
+    endpoint: `${PUBLIC}/${id}`, method: "POST",
+    inputModes: ["application/json"], outputModes: ["application/json"],
+  })),
+  payments: {
+    protocol: "x402",
+    manifest: `${PUBLIC}/.well-known/x402`,
+    network: NET, asset: "USDC", payTo: PAY_TO,
+    rails: SVM_PAY_TO ? { base: PAY_TO, solana: SVM_PAY_TO } : { base: PAY_TO },
+  },
+  free_tier: {
+    note: "Try before paying: the first call needs no payment.",
+    endpoints: [`${PUBLIC}/trial/csv_to_json`, `${PUBLIC}/trial/kpi_score`, `${PUBLIC}/trial/audit`],
+  },
+  proof: { receipts: `${PUBLIC}/receipts.json`, reputation: `${PUBLIC}/reputation.json` },
+}));
+
 // Serve control proofs (OpenTask supplier ownership, and any other well-known files)
 // from disk under WELLKNOWN_DIR. The proof must be published verbatim at the exact
 // challenge URL, so this route mirrors the request path onto the filesystem.
