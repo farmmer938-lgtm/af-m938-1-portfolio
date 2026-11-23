@@ -83,13 +83,15 @@ fi
 #    human view is served by af_liveview.py over CDP on :12001 (no X streaming, no VNC).
 #    Set AF_USE_NOVNC=1 to fall back to the old x11vnc + websockify + noVNC stack.
 if [ "${AF_USE_NOVNC:-0}" = "1" ]; then
-  if ! is_running "novnc_watchdog.sh"; then
-    bash "$SRC/restore_novnc.sh" >>/workspace/.novnc.log 2>&1
-    setsid nohup bash "$SRC/novnc_watchdog.sh" >/dev/null 2>&1 &
-    log "started novnc_watchdog"
-  fi
+  # Legacy noVNC is retired: it competed with af_liveview.py for :12001 and won, which is
+  # why the live view "worked only sometimes". Xvfb + chromium (below) are still required.
+  pkill -f "novnc_watchdog.sh" 2>/dev/null || true
 else
   bash "$SRC/start_desktop.sh" >>/workspace/.novnc.log 2>&1
+  # Sessions live in /workspace/.secrets, which a rebuilt container empties. Restore the
+  # sealed copy first so K does not have to log in again after every restart.
+  python3 /workspace/project/AX_MASTER_BRAIN/tools/af_session_vault.py restore >>/workspace/.af-up.log 2>&1 \
+    && log "restored sealed account sessions" || log "no sealed sessions to restore"
   if ! is_running "af_liveview_watchdog.sh"; then
     setsid nohup bash "$SRC/af_liveview_watchdog.sh" >/dev/null 2>&1 &
     log "started af_liveview_watchdog (CDP live view on :12001)"
