@@ -151,9 +151,20 @@ function csvTrialGate(body) {
   if (rows > TRIAL_MAX_ROWS) return `trial caps at ${TRIAL_MAX_ROWS} rows; the paid endpoint has no limit`;
   return null;
 }
+// A stranger who reads this payload has to be able to pay even if this process is gone.
+// The issue form is the durable rail: a workflow reads the receipt and delivers the report.
+const PAID_ORDER_FORM =
+  "https://github.com/farmmer938-lgtm/autonomous-zero-baht/issues/new" +
+  "?template=paid-order.json&labels=paid-order&title=paid-order";
+const SPEC_PAGE =
+  "https://telegra.ph/AF-DataBridge--pay-005-USDC-per-call-on-Base-11-27";
 const upgrade = (name, price) => ({
   endpoint: `${PUBLIC}/${name}`, price, network: NET,
   note: "same output, no input cap, payable per call over x402 (no account, no API key)",
+  no_server_fallback: PAID_ORDER_FORM,
+  fallback_note:
+    "if this endpoint is down, pay the same price on Base to the payTo address and attach the tx hash to this form; a workflow verifies the transfer and delivers the report",
+  spec: SPEC_PAGE,
 });
 
 // ART STUDIO — free shop window, paid full-resolution delivery.
